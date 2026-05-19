@@ -1,0 +1,6 @@
+streamlit==1.55.0
+plotly==6.6.0
+gspread==6.2.1
+gspread-dataframe==4.0.0
+pandas==2.3.3
+numpy==2.4.2
