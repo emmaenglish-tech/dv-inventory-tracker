@@ -41,6 +41,16 @@ SCOPE_COLORS = {  # high-end vs regular
     "Regular": SLATE,
 }
 
+OWNERSHIP_COLORS = {  # sales: consignment vs DV owned
+    "DV Owned": SLATE,
+    "Consignment": GOLD,
+}
+
+PRODUCT_TYPE_COLORS = {  # sales: instruments vs bows
+    "Instruments": BROWN,
+    "Bows": GOLD,
+}
+
 _TEMPLATE_NAME = "denver_violins"
 
 
