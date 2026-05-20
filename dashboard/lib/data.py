@@ -34,6 +34,15 @@ FLEET_SHEET = "clean_datasets_purchases_by_product"
 FLEET_TAB = "rental_fleet_df"
 INCOME_SHEET = "clean_datasets_sales_by_product_cash"
 INCOME_TAB = "rental_income_df"
+INVENTORY_SALES_SHEET = "clean_datasets_sales_by_product_cash"
+INVENTORY_SALES_TAB = "inventory_sales_df"
+
+# Consignment vs DV-Owned split — the four distribution_accounts that flow
+# into inventory_sales_df partition this way upstream (instrument_sales_df.py).
+_CONSIGNMENT_ACCOUNTS = frozenset({
+    "Consignment Income",
+    "Consignment Instrument Sales",
+})
 
 _DAILY_TTL = 60 * 60 * 24  # the ETL refreshes once a day; no point re-pulling more often
 
@@ -120,6 +129,46 @@ def load_rental_fleet() -> pd.DataFrame:
                    r"straps?|stands?|strings?|rosins?)\b")
         df["accessory"] = df["memo_description"].astype(str).str.contains(
             _acc_rx, regex=True, na=False)
+    return df
+
+
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading instrument sales…")
+def load_inventory_sales() -> pd.DataFrame:
+    """Sales side: one row per payment toward an instrument or bow sale.
+
+    Spans four ``distribution_account`` values upstream — Instrument Sales /
+    Inventory Instrument Sales / Consignment Income / Consignment Instrument
+    Sales — so a single sale can be (a) one row for a paid-in-full ticket or
+    (b) several rows for an installment plan. Staging adds the bookkeeping:
+    ``payment_type`` ∈ {full/final payment, partial payment}, plus running
+    ``total_paid`` / ``remainder_due`` per (customer, memo) group.
+
+    Derived here:
+
+    * ``ownership`` — "consignment" vs "dv_owned" from distribution_account,
+      so the page can group without re-doing the categorical mapping.
+
+    Cash basis only — the accrual export is collected but not yet staged
+    (KB 04_sales_data_taxonomy.md). Low-tier accessory bows live in a
+    different tab (``product_sales_df``) and are NOT included here; the
+    Sales page calls that out.
+    """
+    df = _read(INVENTORY_SALES_SHEET, INVENTORY_SALES_TAB)
+    df["transaction_date"] = pd.to_datetime(df["transaction_date"], errors="coerce")
+    df["month"] = df["transaction_date"].dt.to_period("M")
+    for col in ("quantity", "sales_price", "amount", "total_paid", "remainder_due"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    df["instrument"] = df["instrument"].astype(str).str.strip().str.lower()
+    df["bow"] = _to_bool(df["bow"])
+    for col in ("distribution_account", "customer_full_name", "product_service",
+                "memo_description", "brand", "maker", "details", "payment_type"):
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+    df["ownership"] = (
+        df["distribution_account"].isin(_CONSIGNMENT_ACCOUNTS)
+        .map({True: "consignment", False: "dv_owned"})
+    )
     return df
 
 
