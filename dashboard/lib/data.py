@@ -36,6 +36,18 @@ INCOME_SHEET = "clean_datasets_sales_by_product_cash"
 INCOME_TAB = "rental_income_df"
 INVENTORY_SALES_SHEET = "clean_datasets_sales_by_product_cash"
 INVENTORY_SALES_TAB = "inventory_sales_df"
+SERVICES_SHEET = "clean_datasets_sales_by_product_cash"
+SERVICES_TAB = "services_sales_df"
+
+# find_employee in the staging utils emits only "JF" or "EO" (everything not
+# JF defaults to EO). The EO bucket therefore conflates Evan Orman (part owner /
+# master bowmaker) and Eddie Miller (Mack's husband, instrument luthier). The
+# Workshop page surfaces this honestly via these labels — keep them in sync with
+# the staffing memory + KB 10_business_requirements §People.
+EMPLOYEE_LABELS = {
+    "JF": "JF",
+    "EO": "Evan / Eddie (unsplit)",
+}
 
 # Consignment vs DV-Owned split — the four distribution_accounts that flow
 # into inventory_sales_df partition this way upstream (instrument_sales_df.py).
@@ -169,6 +181,52 @@ def load_inventory_sales() -> pd.DataFrame:
         df["distribution_account"].isin(_CONSIGNMENT_ACCOUNTS)
         .map({True: "consignment", False: "dv_owned"})
     )
+    return df
+
+
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading workshop services…")
+def load_services_sales() -> pd.DataFrame:
+    """Workshop side: one row per service line item.
+
+    Source filter (upstream): ``distribution_account in ('Services',
+    'Bow Services')``. Staging (`services_sales_df.py`) adds:
+
+    * ``service_name`` — one of 22 buckets from
+      ``utils.categorize_service`` (Bow Rehair, Appraisal & Certificates,
+      Sound Post Work, …; see KB ``06_utils_reference``).
+    * ``employee_name`` — ``"JF"`` or ``"EO"`` from ``utils.find_employee``.
+      EO is the catch-all default and bundles Evan Orman + Eddie Miller;
+      a derived ``employee_label`` applies ``EMPLOYEE_LABELS`` so the UI
+      doesn't have to.
+    * ``instrument`` — ``_classify_instrument`` over the search text.
+      ~62 % of rows are ``unknown`` (most service memos don't name the
+      instrument family), so per-instrument breakdowns are noisy — the
+      Workshop page prefers ``bow_flag`` for product-type splits.
+    * ``bow_flag`` — already a real bool in the sheet; True for any
+      bow-related service regardless of which distribution_account it
+      landed in (rehairs in `Services` count too).
+
+    The staging ``month`` column ships as a string (e.g. ``"2024-03"``);
+    re-derived here from ``transaction_date`` to land as a real
+    ``Period[M]`` like every other loader.
+
+    Cash basis only — accrual export isn't staged yet
+    (KB ``04_sales_data_taxonomy``).
+    """
+    df = _read(SERVICES_SHEET, SERVICES_TAB)
+    df["transaction_date"] = pd.to_datetime(df["transaction_date"], errors="coerce")
+    df["month"] = df["transaction_date"].dt.to_period("M")
+    for col in ("quantity", "sales_price", "amount"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    for col in ("distribution_account", "customer_full_name", "product_service",
+                "memo_description", "service_name", "employee_name"):
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+    df["instrument"] = df["instrument"].astype(str).str.strip().str.lower()
+    df["bow_flag"] = _to_bool(df["bow_flag"])
+    df["employee_label"] = df["employee_name"].map(EMPLOYEE_LABELS) \
+                                              .fillna(df["employee_name"])
     return df
 
 
