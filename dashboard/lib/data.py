@@ -39,14 +39,18 @@ INVENTORY_SALES_TAB = "inventory_sales_df"
 SERVICES_SHEET = "clean_datasets_sales_by_product_cash"
 SERVICES_TAB = "services_sales_df"
 
-# find_employee in the staging utils emits only "JF" or "EO" (everything not
-# JF defaults to EO). The EO bucket therefore conflates Evan Orman (part owner /
-# master bowmaker) and Eddie Miller (Mack's husband, instrument luthier). The
-# Workshop page surfaces this honestly via these labels — keep them in sync with
-# the staffing memory + KB 10_business_requirements §People.
+# find_employee in the staging utils emits only "JF" or "EO": it tags a row
+# "JF" when the memo contains "jf" and defaults everything else to "EO" =
+# Evan Orman (co-owner / master bow maker). There is no "EM" code for Eddie
+# Miller (co-owner & Mack's husband / master violin maker) yet, so any of
+# Eddie's non-"JF" bench work is currently MISATTRIBUTED to Evan Orman / EO.
+# Adding an "EM" rule upstream is the fix (KB 09_known_issues §find_employee);
+# until then the "EM" label below is inert. Keep in sync with the staffing
+# memory + KB 10_business_requirements §People.
 EMPLOYEE_LABELS = {
     "JF": "JF",
-    "EO": "Evan / Eddie (unsplit)",
+    "EO": "Evan Orman",
+    "EM": "Eddie Miller",  # not emitted by find_employee yet — see note above
 }
 
 # Consignment vs DV-Owned split — the four distribution_accounts that flow
@@ -195,9 +199,10 @@ def load_services_sales() -> pd.DataFrame:
       ``utils.categorize_service`` (Bow Rehair, Appraisal & Certificates,
       Sound Post Work, …; see KB ``06_utils_reference``).
     * ``employee_name`` — ``"JF"`` or ``"EO"`` from ``utils.find_employee``.
-      EO is the catch-all default and bundles Evan Orman + Eddie Miller;
-      a derived ``employee_label`` applies ``EMPLOYEE_LABELS`` so the UI
-      doesn't have to.
+      ``"EO"`` is Evan Orman (the non-"JF" default); there's no ``"EM"``
+      code for Eddie Miller yet, so Eddie's untagged work is misattributed
+      to EO. A derived ``employee_label`` applies ``EMPLOYEE_LABELS`` so the
+      UI doesn't have to.
     * ``instrument`` — ``_classify_instrument`` over the search text.
       ~62 % of rows are ``unknown`` (most service memos don't name the
       instrument family), so per-instrument breakdowns are noisy — the

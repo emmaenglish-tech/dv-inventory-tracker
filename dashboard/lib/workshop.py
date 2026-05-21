@@ -23,10 +23,11 @@ categories     The ``service_name`` field carries 22 buckets (KB
 
 Employee caveat
 ---------------
-``employee`` is ``"JF"`` or ``"EO"`` only — EO is a catch-all default that
-bundles Evan Orman and Eddie Miller. Group-by-employee is honest but lossy;
-the page calls this out. See KB ``10_business_requirements §People`` /
-``09_known_issues §find_employee``.
+``employee`` is ``"JF"`` or ``"EO"`` only. ``"EO"`` *is* Evan Orman — it's the
+non-"JF" default, and there's no ``"EM"`` code for Eddie Miller yet, so Eddie's
+untagged work is misattributed to Evan Orman. Group-by-employee currently
+conflates the two owners under EO; the page calls this out. See KB
+``10_business_requirements §People`` / ``09_known_issues §find_employee``.
 """
 
 from __future__ import annotations
