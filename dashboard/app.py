@@ -44,7 +44,8 @@ st.markdown(
     "Wholesale/Auction placeholder. Cash basis. "
     "*(Available now — use the nav on the left.)*\n"
     "- **Workshop** — services revenue + jobs by category, instrument vs bow, "
-    "and employee (JF vs Evan/Eddie unsplit). Cash basis. "
+    "and employee (JF vs EO/Evan Orman — Eddie's work currently lumped in). "
+    "Cash basis. "
     "*(Available now — use the nav on the left.)*\n"
     "- **Expenses** — by category, fixed vs variable. *(Planned.)*\n"
 )

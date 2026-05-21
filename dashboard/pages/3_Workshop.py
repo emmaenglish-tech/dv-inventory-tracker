@@ -29,7 +29,7 @@ PRODUCT_SERVICE_COLORS = {
 }
 EMPLOYEE_PALETTE = {
     "JF": GOLD,
-    "Evan / Eddie (unsplit)": SLATE,
+    "Evan Orman": SLATE,
 }
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -71,14 +71,15 @@ with st.expander("Data notes — read once", expanded=False):
         anyone. Revisit once `extract_instrument_metadata` is extended to
         service memos.
 
-        **Employee = `JF` or `EO` only.** `utils.find_employee` recognizes
-        two initials; everything not "JF" defaults to "EO". Today the
-        **EO** bucket bundles **Evan Orman** (part owner / master bowmaker)
-        and **Eddie Miller** (Mack's husband, instrument luthier) — they
-        can't be split until an "EM" code is added to the classifier. The
-        **By Employee** tab labels EO as *"Evan / Eddie (unsplit)"* so the
-        limitation is visible. Tracked in
-        `09_known_issues §find_employee`.
+        **Employee = `JF` or `EO` only — and `EO` means Evan Orman.**
+        `utils.find_employee` tags a row `JF` when the memo contains "jf"
+        and defaults *everything else* to `EO` (**Evan Orman**, co-owner /
+        master bow maker). There's no code for **Eddie Miller** (co-owner &
+        Mack's husband / master violin maker) yet — his would be `EM` — so
+        any of Eddie's bench work that isn't tagged `JF` is currently
+        **misattributed to Evan Orman**. Until an `EM` rule is added to the
+        classifier, read the **Evan Orman** series as "Evan + any of Eddie's
+        untagged work." Tracked in `09_known_issues §find_employee`.
         """
     )
 
@@ -111,9 +112,10 @@ sel_categories = st.sidebar.multiselect(
 )
 sel_employee = st.sidebar.radio(
     "Employee",
-    options=["Both", "JF only", "Evan / Eddie only"],
+    options=["Both", "JF only", "Evan Orman (EO) only"],
     index=0,
-    help="EO bundles Evan Orman + Eddie Miller — see Data notes.",
+    help="EO = Evan Orman. Eddie Miller's untagged work is currently "
+         "misattributed here (no EM code yet) — see Data notes.",
 )
 
 
@@ -137,7 +139,7 @@ def by_category(df: pd.DataFrame) -> pd.DataFrame:
 def by_employee(df: pd.DataFrame) -> pd.DataFrame:
     if sel_employee == "JF only":
         return df[df["employee_name"] == "JF"]
-    if sel_employee == "Evan / Eddie only":
+    if sel_employee == "Evan Orman (EO) only":
         return df[df["employee_name"] == "EO"]
     return df
 
@@ -301,14 +303,14 @@ with tab_split:
 # ── By Employee ───────────────────────────────────────────────────────────
 with tab_emp:
     st.warning(
-        "**The `EO` bucket bundles two people.** `utils.find_employee` only "
-        "emits `JF` or `EO`; everything not `JF` defaults to `EO`. So the "
-        "*Evan / Eddie (unsplit)* series below mixes **Evan Orman** (part "
-        "owner, master bowmaker) and **Eddie Miller** (Mack's husband, "
-        "instrument luthier) — the two are indistinguishable in the staged "
-        "data. Fix is an `EM` code in the classifier "
-        "(`09_known_issues §find_employee`); the bars will split cleanly "
-        "once that lands.",
+        "**`EO` = Evan Orman — but Eddie Miller's work is currently "
+        "misattributed to it.** `utils.find_employee` only emits `JF` or "
+        "`EO`; anything not tagged `JF` defaults to `EO` (**Evan Orman**, "
+        "co-owner / master bow maker). There's no `EM` code for **Eddie "
+        "Miller** (co-owner & Mack's husband / master violin maker) yet, so "
+        "any of Eddie's untagged bench work lands in the Evan Orman bar. Fix "
+        "is an `EM` rule in the classifier (`09_known_issues §find_employee`); "
+        "Eddie splits into his own series once that lands.",
         icon="⚠️",
     )
 
@@ -316,7 +318,7 @@ with tab_emp:
     rev_e = W.revenue_by_month(services, span, by="employee_label")
     fig = px.bar(rev_e, x="month", y="revenue", color="group",
                  color_discrete_map=EMPLOYEE_PALETTE,
-                 category_orders={"group": ["JF", "Evan / Eddie (unsplit)"]},
+                 category_orders={"group": ["JF", "Evan Orman"]},
                  labels={"revenue": "$", "group": "Employee"})
     fig.update_layout(height=380, yaxis_tickprefix="$",
                       yaxis_tickformat=",.0f", barmode="stack")
@@ -326,7 +328,7 @@ with tab_emp:
     jobs_e = W.transactions_by_month(services, span, by="employee_label")
     fig = px.bar(jobs_e, x="month", y="transactions", color="group",
                  color_discrete_map=EMPLOYEE_PALETTE,
-                 category_orders={"group": ["JF", "Evan / Eddie (unsplit)"]},
+                 category_orders={"group": ["JF", "Evan Orman"]},
                  labels={"transactions": "Jobs", "group": "Employee"})
     fig.update_layout(height=380, barmode="stack")
     st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
