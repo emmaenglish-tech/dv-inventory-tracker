@@ -1,24 +1,17 @@
-"""Cached loaders for the cleaned rental Google Sheets.
+"""Cached loaders for the pre-aggregated dashboard tabs.
 
-Design notes (the *why*, since these patterns recur across the dashboard):
+The dashboard is a thin renderer now: every metric DEFINITION lives upstream in
+the denver_violins_data staging pipeline, which materializes monthly rollups
+into the ``clean_datasets_dashboard_aggregates`` sheet (one tab per section).
+This module just loads those tabs and coerces dtypes; lib/{sales,workshop,
+rentals} reshape them for the pages. Mack can open the same sheet to see the
+raw aggregate numbers behind every chart — no in-memory black box.
 
-* ``st.cache_resource`` vs ``st.cache_data``. The gspread *client* is a live
-  connection object — not serializable, shared process-wide — so it goes in
-  ``cache_resource`` (one per process). The *DataFrames* are plain data, so
-  they go in ``cache_data`` with a daily TTL: a session reuses the same frame
-  for every filter/interaction, and it refreshes once a day to match the
-  daily ETL. This is what makes the UI feel instant.
-
-* Auth resolves in priority order so the same code runs locally and on
-  Streamlit Cloud:
-    1. ``st.secrets["gcp_service_account"]``  (Cloud — paste the JSON there)
-    2. ``$DV_SERVICE_ACCOUNT``                (explicit local override)
-    3. ``<repo>/.config/gsperad/service_account.json``  (default checkout)
-
-* All type coercion lives here. Pages and metric code can then trust dtypes
-  (datetime, Period[M], numeric, real bools) instead of re-parsing strings.
+Auth resolves in priority order so the same code runs locally and on Cloud:
+  1. st.secrets["gcp_service_account"]   (Cloud)
+  2. $DV_SERVICE_ACCOUNT                 (explicit local override)
+  3. <repo>/.config/gsperad/service_account.json   (default checkout)
 """
-
 from __future__ import annotations
 
 import os
@@ -29,55 +22,18 @@ import pandas as pd
 import streamlit as st
 from gspread_dataframe import get_as_dataframe
 
-# Cleaned-sheet coordinates (mirrors config.py in the staging repo).
-FLEET_SHEET = "clean_datasets_purchases_by_product"
-FLEET_TAB = "rental_fleet_df"
-INCOME_SHEET = "clean_datasets_sales_by_product_cash"
-INCOME_TAB = "rental_income_df"
-INVENTORY_SALES_SHEET = "clean_datasets_sales_by_product_cash"
-INVENTORY_SALES_TAB = "inventory_sales_df"
-SERVICES_SHEET = "clean_datasets_sales_by_product_cash"
-SERVICES_TAB = "services_sales_df"
+AGG_SHEET = "clean_datasets_dashboard_aggregates"
 
-# find_employee in the staging utils emits only "JF" or "EO": it tags a row
-# "JF" when the memo contains "jf" and defaults everything else to "EO" =
-# Evan Orman (co-owner / master bow maker). There is no "EM" code for Eddie
-# Miller (co-owner & Mack's husband / master violin maker) yet, so any of
-# Eddie's non-"JF" bench work is currently MISATTRIBUTED to Evan Orman / EO.
-# Adding an "EM" rule upstream is the fix (KB 09_known_issues §find_employee);
-# until then the "EM" label below is inert. Keep in sync with the staffing
-# memory + KB 10_business_requirements §People.
-EMPLOYEE_LABELS = {
-    "JF": "JF",
-    "EO": "Evan Orman",
-    "EM": "Eddie Miller",  # not emitted by find_employee yet — see note above
-}
-
-# Consignment vs DV-Owned split — the four distribution_accounts that flow
-# into inventory_sales_df partition this way upstream (instrument_sales_df.py).
-_CONSIGNMENT_ACCOUNTS = frozenset({
-    "Consignment Income",
-    "Consignment Instrument Sales",
-})
-
-_DAILY_TTL = 60 * 60 * 24  # the ETL refreshes once a day; no point re-pulling more often
-
-# <repo>/.config/gsperad/service_account.json — three parents up from this file
-# (lib/ -> dashboard/ -> repo root). Note the intentional "gsperad" typo.
+_DAILY_TTL = 60 * 60 * 24  # rebuilt once a day by the ETL; no point re-pulling more often
 _DEFAULT_SA = Path(__file__).resolve().parents[2] / ".config" / "gsperad" / "service_account.json"
-
 _TRUE = {"true", "1", "1.0", "yes", "y", "t"}
 
 
 def _to_bool(series: pd.Series) -> pd.Series:
-    """gspread returns booleans inconsistently (``True`` / ``"TRUE"`` / ``1.0``
-    depending on the cell). Normalize to a real bool dtype."""
     return series.astype(str).str.strip().str.lower().isin(_TRUE)
 
 
 def _secret_account() -> dict | None:
-    # st.secrets raises if no secrets.toml exists at all (the normal local
-    # case), so probe defensively rather than letting that escape.
     try:
         if "gcp_service_account" in st.secrets:
             return dict(st.secrets["gcp_service_account"])
@@ -91,170 +47,82 @@ def _client() -> gspread.Client:
     secret = _secret_account()
     if secret is not None:
         return gspread.service_account_from_dict(secret)
-
     path = os.environ.get("DV_SERVICE_ACCOUNT") or str(_DEFAULT_SA)
     if not Path(path).is_file():
         raise FileNotFoundError(
-            "No Google service account found. Either add `gcp_service_account` to "
-            "Streamlit secrets (Cloud), set $DV_SERVICE_ACCOUNT to the JSON path, "
-            f"or place the key at {_DEFAULT_SA}."
+            "No Google service account found. Add `gcp_service_account` to "
+            "Streamlit secrets, set $DV_SERVICE_ACCOUNT, or place the key at "
+            f"{_DEFAULT_SA}."
         )
     return gspread.service_account(filename=path)
 
 
-def _read(sheet: str, tab: str) -> pd.DataFrame:
-    ws = _client().open(sheet).worksheet(tab)
+def _read(tab: str) -> pd.DataFrame:
+    ws = _client().open(AGG_SHEET).worksheet(tab)
     df = get_as_dataframe(ws, evaluate_formulas=True)
-    # gspread_dataframe pads to the grid; drop fully-empty rows/cols.
     return df.dropna(axis=0, how="all").dropna(axis=1, how="all").copy()
 
 
-@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading rental fleet…")
-def load_rental_fleet() -> pd.DataFrame:
-    """Inventory side: one row per fleet purchase / opening / qty-adjustment.
-
-    ``unit_count`` is uniformly 1 in the current data, but we keep it numeric
-    rather than assuming, so a future multi-unit row flows through correctly.
-    """
-    df = _read(FLEET_SHEET, FLEET_TAB)
-    df["transaction_date"] = pd.to_datetime(df["transaction_date"], errors="coerce")
-    df["month"] = df["transaction_date"].dt.to_period("M")
-    df["unit_count"] = pd.to_numeric(df["unit_count"], errors="coerce")
-    df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
-    df["instrument"] = df["instrument"].astype(str).str.strip().str.lower()
-    df["high_end_rental"] = _to_bool(df["high_end_rental"])
-    # `bow` separates rental bows from rentable instruments (added to staging
-    # 2026-05-19). Resilient fallback: derive it if the live sheet predates the
-    # staging re-run, so the dashboard is correct either way.
-    if "bow" in df.columns:
-        df["bow"] = _to_bool(df["bow"])
-    else:
-        df["bow"] = df["search_text"].astype(str).str.contains(
-            r"\bbows?\b", case=False, regex=True)
-    # `accessory` excludes parts (cases, bags, fingerboards, …) from
-    # rentable-instrument counts even when the memo mentions a violin/viola/
-    # cello. Same resilience pattern as `bow`.
-    if "accessory" in df.columns:
-        df["accessory"] = _to_bool(df["accessory"])
-    else:
-        _acc_rx = (r"(?i)\b(violins?|violas?|cellos?|basses?)\s+"
-                   r"(cases?|bags?|covers?|fingerboards?|finger\s*boards?|"
-                   r"bridges?|pegs?|endpins?|tailpieces?|chin\s*rests?|"
-                   r"chinrests?|shoulder\s*(?:rests?|pads?|straps?)|mutes?|"
-                   r"cleaning\s*cloths?|cloths?|polish|set\s*ups?|setups?|"
-                   r"straps?|stands?|strings?|rosins?)\b")
-        df["accessory"] = df["memo_description"].astype(str).str.contains(
-            _acc_rx, regex=True, na=False)
+def _month_period(df: pd.DataFrame) -> pd.DataFrame:
+    df["month"] = pd.to_datetime(df["month"].astype(str), errors="coerce").dt.to_period("M")
     return df
 
 
-@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading instrument sales…")
-def load_inventory_sales() -> pd.DataFrame:
-    """Sales side: one row per payment toward an instrument or bow sale.
-
-    Spans four ``distribution_account`` values upstream — Instrument Sales /
-    Inventory Instrument Sales / Consignment Income / Consignment Instrument
-    Sales — so a single sale can be (a) one row for a paid-in-full ticket or
-    (b) several rows for an installment plan. Staging adds the bookkeeping:
-    ``payment_type`` ∈ {full/final payment, partial payment}, plus running
-    ``total_paid`` / ``remainder_due`` per (customer, memo) group.
-
-    Derived here:
-
-    * ``ownership`` — "consignment" vs "dv_owned" from distribution_account,
-      so the page can group without re-doing the categorical mapping.
-
-    Cash basis only — the accrual export is collected but not yet staged
-    (KB 04_sales_data_taxonomy.md). Low-tier accessory bows live in a
-    different tab (``product_sales_df``) and are NOT included here; the
-    Sales page calls that out.
-    """
-    df = _read(INVENTORY_SALES_SHEET, INVENTORY_SALES_TAB)
-    df["transaction_date"] = pd.to_datetime(df["transaction_date"], errors="coerce")
-    df["month"] = df["transaction_date"].dt.to_period("M")
-    for col in ("quantity", "sales_price", "amount", "total_paid", "remainder_due"):
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading sales…")
+def load_sales_monthly() -> pd.DataFrame:
+    """month × instrument × bow × ownership → revenue, units, transactions."""
+    df = _month_period(_read("sales_monthly"))
+    for c in ("revenue", "units", "transactions"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
     df["instrument"] = df["instrument"].astype(str).str.strip().str.lower()
     df["bow"] = _to_bool(df["bow"])
-    for col in ("distribution_account", "customer_full_name", "product_service",
-                "memo_description", "brand", "maker", "details", "payment_type"):
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-    df["ownership"] = (
-        df["distribution_account"].isin(_CONSIGNMENT_ACCOUNTS)
-        .map({True: "consignment", False: "dv_owned"})
-    )
+    df["ownership"] = df["ownership"].astype(str).str.strip()
     return df
 
 
-@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading workshop services…")
-def load_services_sales() -> pd.DataFrame:
-    """Workshop side: one row per service line item.
-
-    Source filter (upstream): ``distribution_account in ('Services',
-    'Bow Services')``. Staging (`services_sales_df.py`) adds:
-
-    * ``service_name`` — one of 22 buckets from
-      ``utils.categorize_service`` (Bow Rehair, Appraisal & Certificates,
-      Sound Post Work, …; see KB ``06_utils_reference``).
-    * ``employee_name`` — ``"JF"`` or ``"EO"`` from ``utils.find_employee``.
-      ``"EO"`` is Evan Orman (the non-"JF" default); there's no ``"EM"``
-      code for Eddie Miller yet, so Eddie's untagged work is misattributed
-      to EO. A derived ``employee_label`` applies ``EMPLOYEE_LABELS`` so the
-      UI doesn't have to.
-    * ``instrument`` — ``_classify_instrument`` over the search text.
-      ~62 % of rows are ``unknown`` (most service memos don't name the
-      instrument family), so per-instrument breakdowns are noisy — the
-      Workshop page prefers ``bow_flag`` for product-type splits.
-    * ``bow_flag`` — already a real bool in the sheet; True for any
-      bow-related service regardless of which distribution_account it
-      landed in (rehairs in `Services` count too).
-
-    The staging ``month`` column ships as a string (e.g. ``"2024-03"``);
-    re-derived here from ``transaction_date`` to land as a real
-    ``Period[M]`` like every other loader.
-
-    Cash basis only — accrual export isn't staged yet
-    (KB ``04_sales_data_taxonomy``).
-    """
-    df = _read(SERVICES_SHEET, SERVICES_TAB)
-    df["transaction_date"] = pd.to_datetime(df["transaction_date"], errors="coerce")
-    df["month"] = df["transaction_date"].dt.to_period("M")
-    for col in ("quantity", "sales_price", "amount"):
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    for col in ("distribution_account", "customer_full_name", "product_service",
-                "memo_description", "service_name", "employee_name"):
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-    df["instrument"] = df["instrument"].astype(str).str.strip().str.lower()
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading workshop…")
+def load_workshop_monthly() -> pd.DataFrame:
+    """month × service_name × bow_flag × employee → revenue, jobs."""
+    df = _month_period(_read("workshop_monthly"))
+    for c in ("revenue", "jobs"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["service_name"] = df["service_name"].astype(str).str.strip()
     df["bow_flag"] = _to_bool(df["bow_flag"])
-    df["employee_label"] = df["employee_name"].map(EMPLOYEE_LABELS) \
-                                              .fillna(df["employee_name"])
+    df["employee_label"] = df["employee"].astype(str).str.strip()
     return df
 
 
-@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading rental income…")
-def load_rental_income() -> pd.DataFrame:
-    """Activity side: one row per fee payment.
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading rentals…")
+def load_rentals_inventory() -> pd.DataFrame:
+    """month × instrument-cut × scope-cut → owned, rented, available.
 
-    ``payment_type`` ∈ {rental_fee, insurance_fee, rental_deposit, late_fee};
-    ``duration`` ∈ {monthly, annual, prorated, unknown}.
-
-    Known upstream issue carried as data, not silently patched: some
-    "Rental Deposit (deleted)" rows are labelled ``rental_fee`` because they
-    leaked in via the Services account (see 09_known_issues). The metric layer
-    excludes deposit-looking rows from the *rented* signal explicitly.
+    Cuts include 'all' rollups; `rented` is a distinct-customer count that's
+    NOT additive across cuts, so each cut is precomputed — select, don't sum.
     """
-    df = _read(INCOME_SHEET, INCOME_TAB)
-    df["transaction_date"] = pd.to_datetime(df["transaction_date"], errors="coerce")
-    df["month"] = df["transaction_date"].dt.to_period("M")
-    df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
-    df["sales_price"] = pd.to_numeric(df["sales_price"], errors="coerce")
-    for col in ("payment_type", "duration", "instrument", "product_service",
-                "customer_full_name", "memo_description"):
-        df[col] = df[col].astype(str).str.strip()
-    df["instrument"] = df["instrument"].str.lower()
+    df = _month_period(_read("rentals_inventory"))
+    for c in ("owned", "rented", "available"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["instrument"] = df["instrument"].astype(str).str.strip().str.lower()
+    df["scope"] = df["scope"].astype(str).str.strip().str.lower()
+    return df
+
+
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading rentals…")
+def load_rentals_monthly() -> pd.DataFrame:
+    """month × instrument × high_end_rental → revenue, cost, delinquent_*.
+
+    Additive flows — sum over any instrument/scope selection and cumulate."""
+    df = _month_period(_read("rentals_monthly"))
+    for c in ("revenue", "cost", "delinquent_count", "delinquent_value"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["instrument"] = df["instrument"].astype(str).str.strip().str.lower()
     df["high_end_rental"] = _to_bool(df["high_end_rental"])
+    return df
+
+
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading rentals…")
+def load_rentals_bows() -> pd.DataFrame:
+    """month → bows_owned (cumulative rental-bow count; Mack's separate category)."""
+    df = _month_period(_read("rentals_bows"))
+    df["bows_owned"] = pd.to_numeric(df["bows_owned"], errors="coerce")
     return df
