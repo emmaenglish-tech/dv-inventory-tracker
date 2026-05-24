@@ -2,10 +2,12 @@
 / high-end vs regular, plus a revenue-vs-cost view and a clearly-labeled
 delinquency placeholder.
 
-The page never computes metrics inline; everything routes through lib.rentals
-so definitions stay centralized and swappable.
+Thin renderer: owned/rented/available come from the precomputed
+``rentals_inventory`` cut grid (distinct-customer "rented" isn't additive, so
+each cut is materialized upstream); revenue/cost/delinquency are summed from
+the additive ``rentals_monthly`` flows. The instrument filter is single-select
+so every owned/rented/available view maps to a precomputed cut.
 """
-
 from __future__ import annotations
 
 import pandas as pd
@@ -14,60 +16,55 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from lib.data import load_rental_fleet, load_rental_income
+from lib.data import (load_rentals_bows, load_rentals_inventory,
+                      load_rentals_monthly)
 from lib import rentals as R
 from lib.theme import (BROWN, GOLD, INSTRUMENT_COLORS, SAGE, SCOPE_COLORS,
-                       SLATE, STATE_COLORS, WARM_GRAY, WINE, apply_theme)
+                       SLATE, WINE, apply_theme)
 
 st.set_page_config(page_title="Rentals — Denver Violins",
                    page_icon="🎻", layout="wide")
 apply_theme()
 
-# ──────────────────────────────────────────────────────────────────────────
-# Header
-# ──────────────────────────────────────────────────────────────────────────
 st.title("Rentals")
 st.caption("Inventory, rental activity, revenue vs cost, and delinquency. "
-           "Data refreshes daily from the cleaned Google Sheets.")
+           "Reads the daily aggregate sheet.")
 
 with st.expander("Data notes — read once", expanded=False):
     st.markdown(
         """
-        **Owned** counts only fleet entries in QB purchase data. Pre-2023 the
-        fleet was under-captured (only **12** instruments recorded by end of
-        2022, while ~77 customers began renting). Mack's three corrections
-        (2026-05-19) — parenthetical counts, leading-integer counts, and
-        excluding accessory parts (cases / fingerboards / bags) — closed most
-        of the gap. Historical Available will still read negative; recent
-        months sit near zero.
+        **Owned** counts only fleet entries in QB purchase data (rentable
+        violin/viola/cello; rental bows and accessory parts excluded). Pre-2023
+        the fleet was under-captured, so historical **Available** reads
+        negative; recent months sit near zero after Mack's 2026-05-19 ledger
+        corrections.
 
         **Rented** is duration-aware: an annual payment carries 12 months, a
         monthly/prorated payment 1 month. Counted as distinct customers in
-        coverage that month (≈ one agreement per customer). Deposits and
-        insurance fees are excluded — no double-counting with rental_fee.
+        coverage that month. Because it's a distinct count it is **not additive
+        across instruments/scope**, so each cut is precomputed upstream — the
+        instrument filter is single-select for that reason.
 
-        **Available = Owned − Rented.** Surfaced raw; recent months are nearly
-        aligned, the historical negative reflects the pre-2023 capture gap.
+        **Available = Owned − Rented**, surfaced raw.
 
-        **High-End vs Regular** detection is sparse (1 of 123 fleet rows, 9 of
-        6,448 income rows). The grouping is included as Mack requested but
-        most rentals fall under "Regular". Improving detection is future work.
+        **High-End vs Regular** detection is sparse in the source data; almost
+        everything falls under "Regular".
 
-        **Delinquency** is a **placeholder** — late-fee rows only. Pending
-        Mack's full definition (e.g. unpaid expected rent, days past due).
+        **Delinquency** is a **placeholder** — late-fee rows only, pending
+        Mack's full definition.
 
-        **Known staging bug** (logged): some "Rental Deposit (deleted)" rows
-        are labelled `rental_fee` upstream — excluded here via a product_service
-        check.
+        Every number here is the raw monthly rollup in
+        `clean_datasets_dashboard_aggregates` — open it to drill in.
         """
     )
 
 # ──────────────────────────────────────────────────────────────────────────
 # Load + sidebar filters
 # ──────────────────────────────────────────────────────────────────────────
-fleet_all = load_rental_fleet()
-income_all = load_rental_income()
-all_months = R.monthly_span(fleet_all, income_all)
+inv_all = load_rentals_inventory()
+flows_all = load_rentals_monthly()
+bows_all = load_rentals_bows()
+all_months = R.monthly_span(inv_all, flows_all, bows_all)
 month_strings = [str(m) for m in all_months]
 
 st.sidebar.header("Filters")
@@ -76,12 +73,12 @@ sel_start, sel_end = st.sidebar.select_slider(
     options=month_strings,
     value=(month_strings[0], month_strings[-1]),
 )
-sel_instruments = st.sidebar.multiselect(
-    "Instrument type",
-    options=["violin", "viola", "cello", "unknown"],
-    default=["violin", "viola", "cello", "unknown"],
-    help="46% of income rows lack instrument metadata — deselecting 'unknown' "
-         "will drop most rental activity from charts.",
+sel_instrument = st.sidebar.selectbox(
+    "Instrument",
+    options=["All", "Violin", "Viola", "Cello", "Unknown"],
+    index=0,
+    help="Single-select: distinct-customer 'rented' isn't additive across "
+         "instruments, so each cut is precomputed upstream.",
 )
 sel_scope = st.sidebar.radio(
     "Scope",
@@ -90,32 +87,31 @@ sel_scope = st.sidebar.radio(
     help="High-end detection is sparse; 'High-End only' will be nearly empty.",
 )
 
+span = pd.period_range(pd.Period(sel_start), pd.Period(sel_end), freq="M")
+instr_cut = "all" if sel_instrument == "All" else sel_instrument.lower()
+scope_cut = {"Both": "all", "Regular only": "regular",
+             "High-End only": "high_end"}[sel_scope]
 
-def in_range(df: pd.DataFrame) -> pd.DataFrame:
-    return df[(df["month"] >= pd.Period(sel_start))
-              & (df["month"] <= pd.Period(sel_end))]
 
-
-def by_scope(df: pd.DataFrame) -> pd.DataFrame:
-    if sel_scope == "High-End only":
-        return df[df["high_end_rental"]]
-    if sel_scope == "Regular only":
-        return df[~df["high_end_rental"]]
+def filter_flows(df: pd.DataFrame) -> pd.DataFrame:
+    df = df[(df["month"] >= pd.Period(sel_start)) & (df["month"] <= pd.Period(sel_end))]
+    if instr_cut != "all":
+        df = df[df["instrument"] == instr_cut]
+    if scope_cut == "regular":
+        df = df[~df["high_end_rental"]]
+    elif scope_cut == "high_end":
+        df = df[df["high_end_rental"]]
     return df
 
 
-def by_instrument(df: pd.DataFrame) -> pd.DataFrame:
-    return df[df["instrument"].isin(sel_instruments)] if sel_instruments else df.iloc[0:0]
-
-
-fleet = by_instrument(by_scope(in_range(fleet_all)))
-income = by_instrument(by_scope(in_range(income_all)))
-span = R.monthly_span(fleet, income) if len(fleet) or len(income) else all_months
+flows = filter_flows(flows_all)
+bows_in_range = bows_all[(bows_all["month"] >= pd.Period(sel_start))
+                         & (bows_all["month"] <= pd.Period(sel_end))]
 
 # ──────────────────────────────────────────────────────────────────────────
 # KPI row
 # ──────────────────────────────────────────────────────────────────────────
-kpi = R.kpi_snapshot(fleet, income, span)
+kpi = R.kpi_snapshot(inv_all, flows, span, instr_cut, scope_cut)
 st.subheader(f"As of {kpi['as_of']}")
 
 c1, c2, c3, c4, c5, c6 = st.columns(6)
@@ -131,10 +127,12 @@ c4.metric("Delinquent (count) ⚠︎", f"{int(dc)}", f"{int(dcd):+d}",
           help="PLACEHOLDER — late-fee rows only.")
 c5.metric("Delinquent ($) ⚠︎", f"${dv:,.0f}", f"{dvd:+,.0f}",
           help="PLACEHOLDER — late-fee rows only. Delta in $.")
-c6.metric("Rental bows", f"{R.bows_owned_total(fleet)}",
-          help="Separate fleet category (Mack's split).")
+c6.metric("Rental bows", f"{R.bows_owned_total(bows_in_range)}",
+          help="Separate shop-wide fleet category (Mack's split); not split by "
+               "instrument/scope.")
 
 st.caption("⚠︎ = placeholder metric pending Mack's full delinquency definition.")
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Helpers for charts
@@ -144,6 +142,8 @@ def _shared_xaxis(fig: go.Figure) -> go.Figure:
     fig.update_layout(hovermode="x unified")
     return fig
 
+
+_INSTR_CMAP = {k.title(): v for k, v in INSTRUMENT_COLORS.items()}
 
 # ──────────────────────────────────────────────────────────────────────────
 # Tabs
@@ -155,63 +155,58 @@ tab_overview, tab_instr, tab_scope, tab_rev, tab_delinq = st.tabs(
 
 # ── Overview ──────────────────────────────────────────────────────────────
 with tab_overview:
+    cut = R.inventory_for_cut(inv_all, span, instr_cut, scope_cut)
     st.markdown("#### Owned vs Rented")
-    owned = R.owned_by_month(fleet, span)
-    rented = R.rented_by_month(income, span)
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=owned["month"], y=owned["owned"],
+    fig.add_trace(go.Scatter(x=cut["month"], y=cut["owned"],
                              name="Owned (cumulative)", mode="lines",
                              line=dict(color=SLATE, width=3)))
-    fig.add_trace(go.Scatter(x=rented["month"], y=rented["rented"],
+    fig.add_trace(go.Scatter(x=cut["month"], y=cut["rented"],
                              name="Rented (duration-aware)", mode="lines",
                              line=dict(color=BROWN, width=3)))
     fig.update_layout(height=380, yaxis_title="Instruments")
     st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
 
     st.markdown("#### Available (Owned − Rented)")
-    avail = R.available_by_month(fleet, income, span)
-    colors = [SAGE if v >= 0 else WINE for v in avail["available"]]
-    fig = go.Figure(go.Bar(x=avail["month"], y=avail["available"],
+    colors = [SAGE if v >= 0 else WINE for v in cut["available"]]
+    fig = go.Figure(go.Bar(x=cut["month"], y=cut["available"],
                            marker_color=colors,
                            hovertemplate="%{x|%b %Y}<br>Available: %{y}<extra></extra>"))
     fig.add_hline(y=0, line=dict(color="#8A8378", width=1))
-    fig.update_layout(height=300, yaxis_title="Instruments",
-                      showlegend=False)
+    fig.update_layout(height=300, yaxis_title="Instruments", showlegend=False)
     st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
-    st.caption("Negative bars are mostly historical (2021–22 ledger frozen "
-               "at 12 instruments). Recent months sit at/near zero after "
-               "Mack's 2026-05-19 ledger corrections.")
+    st.caption("Negative bars are mostly historical (pre-2023 ledger gap); "
+               "recent months sit at/near zero.")
 
 # ── By Instrument ─────────────────────────────────────────────────────────
 with tab_instr:
+    st.caption("Breakdown shows all instruments regardless of the instrument "
+               "filter (the filter drives the Overview + KPI cards).")
     st.markdown("#### Owned by instrument (cumulative)")
-    o_by_i = R.owned_by_month(fleet, span, by="instrument")
+    o_by_i = R.inventory_by_instrument(inv_all, span, "owned", scope=scope_cut)
     fig = px.area(o_by_i, x="month", y="owned", color="group",
-                  color_discrete_map={k.title(): v for k, v in INSTRUMENT_COLORS.items()},
+                  color_discrete_map=_INSTR_CMAP,
                   labels={"owned": "Instruments", "group": "Instrument"})
     fig.update_layout(height=380)
     st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
 
     st.markdown("#### Rented by instrument")
-    r_by_i = R.rented_by_month(income, span, by="instrument")
+    r_by_i = R.inventory_by_instrument(inv_all, span, "rented", scope=scope_cut)
     fig = px.line(r_by_i, x="month", y="rented", color="group",
-                  color_discrete_map={k.title(): v for k, v in INSTRUMENT_COLORS.items()},
+                  color_discrete_map=_INSTR_CMAP,
                   labels={"rented": "Customers", "group": "Instrument"})
     fig.update_traces(line=dict(width=2.5))
     fig.update_layout(height=380)
     st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
-    st.caption("'Unknown' is large because 46% of income rows don't carry "
-               "instrument metadata in product_service — improving extraction "
-               "is future work.")
+    st.caption("'Unknown' is large because many income rows don't carry "
+               "instrument metadata — improving extraction is future work.")
 
 # ── High-End vs Regular ───────────────────────────────────────────────────
 with tab_scope:
-    st.info("Detection sparse: only 1 of 123 fleet rows and 9 of 6,448 income "
-            "rows are tagged high-end in the source data. The split is shown "
-            "as Mack requested; almost everything falls under 'Regular'.",
-            icon="ℹ️")
+    st.info("Detection is sparse in the source data; almost everything falls "
+            "under 'Regular'.", icon="ℹ️")
     st.markdown("#### Owned by scope (cumulative)")
-    o_by_s = R.owned_by_month(fleet, span, by="high_end_rental")
+    o_by_s = R.inventory_by_scope(inv_all, span, "owned", instrument=instr_cut)
     fig = px.area(o_by_s, x="month", y="owned", color="group",
                   color_discrete_map=SCOPE_COLORS,
                   labels={"owned": "Instruments", "group": "Scope"})
@@ -219,7 +214,7 @@ with tab_scope:
     st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
 
     st.markdown("#### Rented by scope")
-    r_by_s = R.rented_by_month(income, span, by="high_end_rental")
+    r_by_s = R.inventory_by_scope(inv_all, span, "rented", instrument=instr_cut)
     fig = px.line(r_by_s, x="month", y="rented", color="group",
                   color_discrete_map=SCOPE_COLORS,
                   labels={"rented": "Customers", "group": "Scope"})
@@ -229,7 +224,7 @@ with tab_scope:
 
 # ── Revenue vs Cost ───────────────────────────────────────────────────────
 with tab_rev:
-    rvc = R.revenue_vs_cost_by_month(income, fleet, span)
+    rvc = R.revenue_vs_cost_by_month(flows, span)
     st.markdown("#### Monthly rental revenue vs fleet cost")
     fig = go.Figure()
     fig.add_trace(go.Bar(x=rvc["month"], y=rvc["revenue"], name="Revenue",
@@ -256,29 +251,23 @@ with tab_rev:
                       yaxis_tickprefix="$", yaxis_tickformat=",.0f")
     st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
 
-    total_rev = rvc["cum_revenue"].iloc[-1]
-    total_cost = rvc["cum_cost"].iloc[-1]
-    margin = total_rev - total_cost
+    total_rev = rvc["cum_revenue"].iloc[-1] if len(rvc) else 0.0
+    total_cost = rvc["cum_cost"].iloc[-1] if len(rvc) else 0.0
     m1, m2, m3 = st.columns(3)
-    m1.metric("All-time rental revenue", f"${total_rev:,.0f}")
-    m2.metric("All-time fleet cost", f"${total_cost:,.0f}")
-    m3.metric("Net (revenue − cost)", f"${margin:,.0f}")
+    m1.metric("Rental revenue (range)", f"${total_rev:,.0f}")
+    m2.metric("Fleet cost (range)", f"${total_cost:,.0f}")
+    m3.metric("Net (revenue − cost)", f"${total_rev - total_cost:,.0f}")
 
 # ── Delinquency placeholder ───────────────────────────────────────────────
 with tab_delinq:
-    st.warning("**Placeholder definition.** Counts the 49 late-fee rows only. "
-               "Pending Mack's real delinquency definition (e.g. customers "
-               "with unpaid expected rent, days past due, value owed). The "
-               "shape of the chart is what Mack asked for; the data will be "
-               "swapped in lib/rentals.py:delinquency_placeholder_by_month "
-               "once the definition lands.",
+    st.warning("**Placeholder definition.** Counts late-fee rows only. Pending "
+               "Mack's real delinquency definition; the chart shape is what she "
+               "asked for, and the data swaps in upstream once defined.",
                icon="🚧")
-
-    dq = R.delinquency_placeholder_by_month(income, span)
+    dq = R.delinquency_by_month(flows, span)
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_trace(go.Bar(x=dq["month"], y=dq["delinquent_count"],
-                         name="Delinquent count",
-                         marker_color=WINE,
+                         name="Delinquent count", marker_color=WINE,
                          hovertemplate="%{x|%b %Y}<br>Count: %{y}<extra></extra>"),
                   secondary_y=False)
     fig.add_trace(go.Scatter(x=dq["month"], y=dq["delinquent_value"],

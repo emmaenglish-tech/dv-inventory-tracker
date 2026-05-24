@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from lib.data import load_inventory_sales
+from lib.data import load_sales_monthly
 from lib import sales as S
 from lib.theme import (BROWN, GOLD, INSTRUMENT_COLORS, OWNERSHIP_COLORS,
                        PRODUCT_TYPE_COLORS, SAGE, SLATE, WARM_GRAY, WINE,
@@ -72,7 +72,7 @@ with st.expander("Data notes — read once", expanded=False):
 # ──────────────────────────────────────────────────────────────────────────
 # Load + sidebar filters
 # ──────────────────────────────────────────────────────────────────────────
-sales_all = load_inventory_sales()
+sales_all = load_sales_monthly()
 all_months = S.monthly_span(sales_all)
 month_strings = [str(m) for m in all_months]
 
@@ -278,8 +278,8 @@ with tab_own:
 
     # Side stat: all-time totals per ownership
     totals = (sales.groupby("ownership")
-                   .agg(revenue=("amount", "sum"),
-                        rows=("amount", "size"))
+                   .agg(revenue=("revenue", "sum"),
+                        rows=("transactions", "sum"))
                    .reset_index())
     if len(totals):
         st.markdown("#### All-time totals")
@@ -310,7 +310,7 @@ with tab_wholesale:
         "*Consignment vs DV Owned* tab, scoped to DV-Owned rows only."
     )
 
-    dv_owned_rows = int((sales["ownership"] == "dv_owned").sum())
+    dv_owned_rows = int(sales.loc[sales["ownership"] == "dv_owned", "transactions"].sum())
     st.caption(f"Today there are {dv_owned_rows:,} DV-Owned payment rows in "
                "the current filter — all currently uncategorized at the "
                "Wholesale/Auction level.")

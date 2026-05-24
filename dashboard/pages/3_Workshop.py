@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from lib.data import load_services_sales
+from lib.data import load_workshop_monthly
 from lib import workshop as W
 from lib.theme import (BROWN, GOLD, PRODUCT_TYPE_COLORS, SAGE, SLATE,
                        WARM_GRAY, WINE, apply_theme)
@@ -86,7 +86,7 @@ with st.expander("Data notes — read once", expanded=False):
 # ──────────────────────────────────────────────────────────────────────────
 # Load + sidebar filters
 # ──────────────────────────────────────────────────────────────────────────
-services_all = load_services_sales()
+services_all = load_workshop_monthly()
 all_months = W.monthly_span(services_all)
 month_strings = [str(m) for m in all_months]
 all_categories = sorted(services_all["service_name"].dropna().unique().tolist())
@@ -138,9 +138,9 @@ def by_category(df: pd.DataFrame) -> pd.DataFrame:
 
 def by_employee(df: pd.DataFrame) -> pd.DataFrame:
     if sel_employee == "JF only":
-        return df[df["employee_name"] == "JF"]
+        return df[df["employee_label"] == "JF"]
     if sel_employee == "Evan Orman (EO) only":
-        return df[df["employee_name"] == "EO"]
+        return df[df["employee_label"] == "Evan Orman"]
     return df
 
 
@@ -289,8 +289,8 @@ with tab_split:
 
     # Side stat: all-time totals per service type
     totals = (services.groupby("bow_flag")
-                      .agg(revenue=("amount", "sum"),
-                           jobs=("amount", "size"))
+                      .agg(revenue=("revenue", "sum"),
+                           jobs=("jobs", "sum"))
                       .reset_index())
     if len(totals):
         st.markdown("#### All-time totals")
@@ -335,8 +335,8 @@ with tab_emp:
 
     # Side stat: all-time totals per employee
     totals = (services.groupby("employee_label")
-                      .agg(revenue=("amount", "sum"),
-                           jobs=("amount", "size"))
+                      .agg(revenue=("revenue", "sum"),
+                           jobs=("jobs", "sum"))
                       .reset_index()
                       .sort_values("revenue", ascending=False))
     if len(totals):
