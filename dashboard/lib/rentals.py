@@ -6,7 +6,7 @@ Sources (all upstream-defined):
     count, NOT additive across cuts, so we read a cut rather than summing.
   * ``rentals_monthly``   — revenue / cost / delinquency flows, additive at
     month × instrument × high_end_rental (page filters then we sum + cumulate).
-  * ``rentals_bows``      — cumulative rental-bow count (Mack's separate split).
+  * ``rentals_bows``      — cumulative rental-bow count (a separate fleet split).
 
 Cut selectors: instrument ∈ {all, violin, viola, cello, unknown};
 scope ∈ {all, regular, high_end}.
@@ -81,7 +81,7 @@ def revenue_vs_cost_by_month(flows: pd.DataFrame, span: pd.PeriodIndex) -> pd.Da
 
 
 def delinquency_by_month(flows: pd.DataFrame, span: pd.PeriodIndex) -> pd.DataFrame:
-    """PLACEHOLDER — late-fee rows only. `flows` already filtered."""
+    """Delinquent count + value summed to month. `flows` already filtered."""
     f = flows[flows["month"].notna()]
     g = (f.groupby("month")
           .agg(delinquent_count=("delinquent_count", "sum"),
@@ -96,6 +96,34 @@ def delinquency_by_month(flows: pd.DataFrame, span: pd.PeriodIndex) -> pd.DataFr
 def bows_owned_total(bows: pd.DataFrame) -> int:
     b = bows[bows["month"].notna()].sort_values("month")
     return int(b["bows_owned"].iloc[-1]) if len(b) else 0
+
+
+def _as_of_value(inv, span, instrument, scope, value) -> float:
+    """Latest in-range month's `value` for one precomputed cut (inventory is
+    cumulative state, so 'as of today' = the last month in the selected span)."""
+    if span is None or len(span) == 0:
+        return 0.0
+    cut = inventory_for_cut(inv, span, instrument, scope)
+    return float(cut[value].iloc[-1]) if len(cut) else 0.0
+
+
+def fleet_snapshot(inv, flows, span, scope="all") -> dict:
+    """As-of-today inventory state for the BAN row: total fleet size, % rented,
+    cumulative fleet cost, and per-instrument available counts."""
+    owned = _as_of_value(inv, span, "all", scope, "owned")
+    rented = _as_of_value(inv, span, "all", scope, "rented")
+    pct_rented = (rented / owned) if owned else 0.0
+    cum_cost = float(revenue_vs_cost_by_month(flows, span)["cum_cost"].iloc[-1]) \
+        if span is not None and len(span) else 0.0
+    available = {i: _as_of_value(inv, span, i, scope, "available") for i in RENTABLE}
+    return {
+        "owned": owned,
+        "rented": rented,
+        "pct_rented": pct_rented,
+        "cum_cost": cum_cost,
+        "available": available,
+        "as_of": span.max().strftime("%b %Y") if span is not None and len(span) else "—",
+    }
 
 
 def _delta(series: pd.Series) -> tuple[float, float]:

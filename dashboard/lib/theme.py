@@ -24,8 +24,33 @@ INSTRUMENT_COLORS = {
     "violin": GOLD,
     "viola": SAGE,
     "cello": SLATE,
+    "bow": BROWN,
     "bass": "#6B5B95",
     "unknown": WARM_GRAY,
+}
+
+# Title-cased single instrument dimension (Violin/Viola/Cello/Bow) — the
+# canonical grouping now that a bow counts as an instrument (lib/instruments).
+INSTRUMENT_GROUP_COLORS = {
+    "Violin": GOLD,
+    "Viola": SAGE,
+    "Cello": SLATE,
+    "Bow": BROWN,
+    "Unknown": WARM_GRAY,
+}
+
+# A genuinely distinct qualitative palette for category charts (e.g. the 22
+# workshop service categories) so bars don't all read as the same color.
+CATEGORICAL = [
+    BROWN, SLATE, SAGE, GOLD, WINE, "#6B5B95", "#4E8067",
+    "#C56B4B", "#7A6B54", "#8E9B8C", "#A8743F", "#5F6B7A",
+]
+
+# Expenses: fixed monthly vs variable vs infrequent.
+EXPENSE_CLASS_COLORS = {
+    "Fixed": SLATE,
+    "Variable": SAGE,
+    "Infrequent": GOLD,
 }
 
 # Owned / Rented / Available / Delinquent — used by the inventory state charts.

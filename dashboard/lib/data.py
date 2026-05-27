@@ -122,7 +122,83 @@ def load_rentals_monthly() -> pd.DataFrame:
 
 @st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading rentals…")
 def load_rentals_bows() -> pd.DataFrame:
-    """month → bows_owned (cumulative rental-bow count; Mack's separate category)."""
+    """month → bows_owned (cumulative rental-bow count; a separate fleet category)."""
     df = _month_period(_read("rentals_bows"))
     df["bows_owned"] = pd.to_numeric(df["bows_owned"], errors="coerce")
+    return df
+
+
+# ── New-report tabs (materialized upstream after this lands) ──────────────────
+# These loaders tolerate a missing tab so the app still runs before the upstream
+# aggregator has created them — they return an empty frame with the right columns.
+def _read_optional(tab: str, columns: list[str]) -> pd.DataFrame:
+    try:
+        return _read(tab)
+    except gspread.WorksheetNotFound:
+        return pd.DataFrame(columns=columns)
+
+
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading product sales…")
+def load_product_sales_monthly() -> pd.DataFrame:
+    """month × product_category × product_subcategory → revenue, units, transactions."""
+    df = _month_period(_read_optional(
+        "product_sales_monthly",
+        ["month", "product_category", "product_subcategory",
+         "revenue", "units", "transactions"]))
+    for c in ("revenue", "units", "transactions"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["product_category"] = df["product_category"].astype(str).str.strip()
+    df["product_subcategory"] = df["product_subcategory"].astype(str).str.strip()
+    return df
+
+
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading other income…")
+def load_other_income_monthly() -> pd.DataFrame:
+    """month × income_type → revenue, transactions (shipping, appraisals, COAs…)."""
+    df = _month_period(_read_optional(
+        "other_income_monthly",
+        ["month", "income_type", "revenue", "transactions"]))
+    for c in ("revenue", "transactions"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["income_type"] = df["income_type"].astype(str).str.strip()
+    return df
+
+
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading expenses…")
+def load_expenses_monthly() -> pd.DataFrame:
+    """month × expense_category × expense_class → amount, transactions.
+
+    `expense_class` ∈ {fixed, variable, infrequent}; `amount` is money-out
+    (positive) for operating spend."""
+    df = _month_period(_read_optional(
+        "expenses_monthly",
+        ["month", "expense_category", "expense_class", "amount", "transactions"]))
+    for c in ("amount", "transactions"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["expense_category"] = df["expense_category"].astype(str).str.strip()
+    df["expense_class"] = df["expense_class"].astype(str).str.strip()
+    return df
+
+
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading inventory…")
+def load_instrument_inventory() -> pd.DataFrame:
+    """month × instrument → units (cumulative DV-owned stock), cost (cumulative)."""
+    df = _month_period(_read_optional(
+        "instrument_inventory_monthly",
+        ["month", "instrument", "units", "cost"]))
+    for c in ("units", "cost"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["instrument"] = df["instrument"].astype(str).str.strip().str.lower()
+    return df
+
+
+@st.cache_data(ttl=_DAILY_TTL, show_spinner="Loading inventory…")
+def load_product_inventory() -> pd.DataFrame:
+    """month × product_category → units (cumulative stock), cost (cumulative)."""
+    df = _month_period(_read_optional(
+        "product_inventory_monthly",
+        ["month", "product_category", "units", "cost"]))
+    for c in ("units", "cost"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["product_category"] = df["product_category"].astype(str).str.strip()
     return df
