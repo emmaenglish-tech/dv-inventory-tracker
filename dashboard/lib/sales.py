@@ -1,9 +1,12 @@
 """Sales reshapers over the pre-aggregated ``sales_monthly`` tab.
 
-Definitions now live upstream (denver_violins_data); the page hands us a
-filtered slice of the materialized rollup and these functions just group/sum
-the pre-computed measures. Pure functions, no I/O — same page-facing API as
-before, so the page barely changed.
+Definitions live upstream (denver_violins_data); the page hands us a filtered
+slice of the materialized rollup and these functions group/sum the pre-computed
+measures. Pure functions, no I/O.
+
+``acquisition`` is how Denver Violins acquired the instrument it sold:
+Consignment, or DV-Owned. The data only distinguishes those two today; a
+finer Wholesale/Auction split is pending an upstream tag.
 """
 from __future__ import annotations
 
@@ -35,7 +38,9 @@ def _label_groups(values: pd.Series, by: str) -> pd.Series:
         return values.map({True: "Bows", False: "Instruments"}).fillna("Instruments")
     if by == "ownership":
         return values.map({"consignment": "Consignment",
-                           "dv_owned": "DV Owned"}).fillna(values.astype(str))
+                           "dv_owned": "DV-Owned"}).fillna(values.astype(str))
+    if by == "instrument_group":
+        return values.astype(str)
     return values.astype(str).str.title()
 
 

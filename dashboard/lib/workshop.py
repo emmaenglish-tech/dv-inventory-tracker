@@ -90,7 +90,8 @@ def category_breakdown(services: pd.DataFrame) -> pd.DataFrame:
                     .reset_index()
                     .sort_values("revenue", ascending=False))
     total = grp["revenue"].sum()
-    grp["revenue_share"] = grp["revenue"] / total if total else 0.0
+    # Stored as a percentage (0–100) so the page renders "30.0%", not "0.3%".
+    grp["revenue_share"] = (grp["revenue"] / total * 100.0) if total else 0.0
     return grp
 
 
