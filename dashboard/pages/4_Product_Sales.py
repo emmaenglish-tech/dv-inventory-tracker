@@ -14,7 +14,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from lib.data import load_product_inventory, load_product_sales_monthly
+from lib.data import (global_monthly_span, load_product_inventory,
+                      load_product_sales_monthly)
 from lib import products as P
 from lib.filters import date_range_filter
 from lib.theme import BROWN, CATEGORICAL, SAGE, SLATE, apply_theme
@@ -34,7 +35,7 @@ st.caption("Accessory products — rosin, cases, strings, accessory bows, and th
 sales_all = load_product_sales_monthly()
 inv_all = load_product_inventory()
 
-all_months = P.monthly_span(sales_all, inv_all)
+all_months = global_monthly_span()
 start, end = date_range_filter(all_months)
 
 all_categories = sorted(

@@ -12,7 +12,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.data import load_other_income_monthly
+from lib.data import global_monthly_span, load_other_income_monthly
 from lib import other_income as O
 from lib.filters import date_range_filter
 from lib.theme import CATEGORICAL, SAGE, apply_theme
@@ -32,7 +32,7 @@ st.info("Today this is mainly shipping income; appraisals and COAs will appear "
 # Load + sidebar filters (date range persists across pages)
 # ──────────────────────────────────────────────────────────────────────────
 income_all = load_other_income_monthly()
-all_months = O.monthly_span(income_all)
+all_months = global_monthly_span()
 start, end = date_range_filter(all_months)
 
 

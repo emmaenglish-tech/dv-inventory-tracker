@@ -13,8 +13,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.data import (load_rentals_bows, load_rentals_inventory,
-                      load_rentals_monthly)
+from lib.data import (global_monthly_span, load_rentals_bows,
+                      load_rentals_inventory, load_rentals_monthly)
 from lib.filters import date_range_filter
 from lib import rentals as R
 from lib.theme import (INSTRUMENT_GROUP_COLORS, SAGE, SLATE, WINE, apply_theme)
@@ -32,7 +32,7 @@ st.caption("Fleet inventory, rental revenue vs cost, and delinquency.")
 inv_all = load_rentals_inventory()
 flows_all = load_rentals_monthly()
 bows_all = load_rentals_bows()
-all_months = R.monthly_span(inv_all, flows_all, bows_all)
+all_months = global_monthly_span()
 
 st.sidebar.header("Filters")
 sel_start, sel_end = date_range_filter(all_months)

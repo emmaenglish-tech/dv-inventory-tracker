@@ -12,9 +12,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.data import (load_expenses_monthly, load_other_income_monthly,
-                      load_product_sales_monthly, load_rentals_monthly,
-                      load_sales_monthly, load_workshop_monthly)
+from lib.data import (global_monthly_span, load_expenses_monthly,
+                      load_other_income_monthly, load_product_sales_monthly,
+                      load_rentals_monthly, load_sales_monthly,
+                      load_workshop_monthly)
 from lib.filters import date_range_filter
 from lib.theme import CATEGORICAL, WINE, apply_theme
 
@@ -45,16 +46,8 @@ REVENUE_SOURCES = {
 }
 expenses = _monthly(load_expenses_monthly(), "amount")
 
-# Union of all months that carry any signal, for the shared date filter.
-month_parts = [s.index for s in REVENUE_SOURCES.values() if len(s)]
-if len(expenses):
-    month_parts.append(expenses.index)
-if month_parts:
-    union = pd.PeriodIndex(sorted(set().union(*[set(p) for p in month_parts])),
-                           freq="M")
-    all_months = pd.period_range(union.min(), union.max(), freq="M")
-else:
-    all_months = pd.PeriodIndex([], freq="M")
+# Shared bound for the cross-page date filter — see `global_monthly_span`.
+all_months = global_monthly_span()
 
 st.sidebar.header("Filters")
 sel_start, sel_end = date_range_filter(all_months)

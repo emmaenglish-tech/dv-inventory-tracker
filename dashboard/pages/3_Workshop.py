@@ -13,7 +13,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.data import load_workshop_monthly
+from lib.data import global_monthly_span, load_workshop_monthly
 from lib.filters import date_range_filter
 from lib import workshop as W
 from lib.theme import (BROWN, CATEGORICAL, GOLD, SAGE, SLATE, apply_theme)
@@ -44,7 +44,7 @@ st.caption("Services revenue and activity — instrument repair, bow rehairs, "
 # Load + sidebar filters
 # ──────────────────────────────────────────────────────────────────────────
 services_all = load_workshop_monthly()
-all_months = W.monthly_span(services_all)
+all_months = global_monthly_span()
 all_categories = sorted(services_all["service_name"].dropna().unique().tolist())
 all_employees = sorted(services_all["employee_label"].dropna().unique().tolist())
 

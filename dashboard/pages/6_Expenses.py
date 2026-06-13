@@ -16,7 +16,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.data import load_expenses_monthly
+from lib.data import global_monthly_span, load_expenses_monthly
 from lib import expenses as E
 from lib.filters import date_range_filter
 from lib.theme import EXPENSE_CLASS_COLORS, apply_theme
@@ -37,7 +37,7 @@ st.caption("Owner draws and equity movements are excluded — these are operatin
 expenses_raw = load_expenses_monthly()
 expenses_all = E.operating_only(expenses_raw)   # drop owner draw / equity
 
-all_months = E.monthly_span(expenses_all)
+all_months = global_monthly_span()
 start, end = date_range_filter(all_months)
 
 sel_classes = st.sidebar.multiselect(
