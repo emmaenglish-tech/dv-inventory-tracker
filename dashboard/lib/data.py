@@ -202,3 +202,35 @@ def load_product_inventory() -> pd.DataFrame:
         df[c] = pd.to_numeric(df[c], errors="coerce")
     df["product_category"] = df["product_category"].astype(str).str.strip()
     return df
+
+
+@st.cache_data(ttl=_DAILY_TTL, show_spinner=False)
+def global_monthly_span() -> pd.PeriodIndex:
+    """Earliest month present in any monthly aggregate, extended through the
+    current month. Shared bound for the cross-page date filter so the picker
+    stays consistent as the user navigates between pages whose individual
+    datasets cover different month ranges."""
+    loaders = (
+        load_sales_monthly,
+        load_workshop_monthly,
+        load_rentals_inventory,
+        load_rentals_monthly,
+        load_rentals_bows,
+        load_product_sales_monthly,
+        load_other_income_monthly,
+        load_expenses_monthly,
+        load_instrument_inventory,
+        load_product_inventory,
+    )
+    mins: list[pd.Period] = []
+    for fn in loaders:
+        df = fn()
+        if df is None or not len(df) or "month" not in df.columns:
+            continue
+        months = df["month"].dropna()
+        if len(months):
+            mins.append(months.min())
+    if not mins:
+        return pd.PeriodIndex([], freq="M")
+    return pd.period_range(
+        min(mins), pd.Timestamp.today().to_period("M"), freq="M")

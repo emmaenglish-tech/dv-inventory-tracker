@@ -13,7 +13,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.data import load_sales_monthly
+from lib.data import global_monthly_span, load_sales_monthly
 from lib.filters import date_range_filter
 from lib.instruments import add_instrument_group, ordered_present
 from lib import sales as S
@@ -35,7 +35,7 @@ st.caption("Revenue and units for instrument and bow sales, with the "
 # Load + sidebar filters
 # ──────────────────────────────────────────────────────────────────────────
 sales_all = add_instrument_group(load_sales_monthly())
-all_months = S.monthly_span(sales_all)
+all_months = global_monthly_span()
 
 st.sidebar.header("Filters")
 sel_start, sel_end = date_range_filter(all_months)
