@@ -13,8 +13,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.data import (global_monthly_span, load_rentals_bows,
-                      load_rentals_inventory, load_rentals_monthly)
+from lib.data import (PURCHASES_SHEET, SALES_SHEET, global_monthly_span,
+                      load_rentals_bows, load_rentals_inventory,
+                      load_rentals_monthly, source_links)
 from lib.filters import date_range_filter
 from lib import rentals as R
 from lib.theme import (INSTRUMENT_GROUP_COLORS, SAGE, SLATE, WINE, apply_theme)
@@ -112,6 +113,10 @@ with tab_overview:
     cut = R.inventory_for_cut(inv_all, span, instr_cut, scope_cut)
 
     st.markdown("#### Fleet owned vs rented over time")
+    source_links(
+        ("Owned", PURCHASES_SHEET, "rental_fleet_df"),
+        ("Rented", SALES_SHEET, "rental_income_df"),
+    )
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=cut["month"], y=cut["owned"],
                              name="Owned", mode="lines",
@@ -124,6 +129,10 @@ with tab_overview:
                     key="rentals_owned_vs_rented")
 
     st.markdown("#### Available (Owned − Rented) over time")
+    source_links(
+        ("Owned", PURCHASES_SHEET, "rental_fleet_df"),
+        ("Rented", SALES_SHEET, "rental_income_df"),
+    )
     fig = go.Figure(go.Scatter(
         x=cut["month"], y=cut["available"], mode="lines",
         line=dict(color=SAGE, width=3), name="Available",
@@ -141,6 +150,7 @@ with tab_instr:
                "filter (the filter drives the Overview and the metric cards).")
 
     st.markdown("#### Owned by instrument over time")
+    source_links(("", PURCHASES_SHEET, "rental_fleet_df"))
     o_by_i = R.inventory_by_instrument(inv_all, span, "owned", scope=scope_cut)
     fig = px.line(o_by_i, x="month", y="owned", color="group",
                   color_discrete_map=INSTRUMENT_GROUP_COLORS,
@@ -151,6 +161,7 @@ with tab_instr:
                     key="rentals_owned_by_instrument")
 
     st.markdown("#### Rented by instrument over time")
+    source_links(("", SALES_SHEET, "rental_income_df"))
     r_by_i = R.inventory_by_instrument(inv_all, span, "rented", scope=scope_cut)
     r_by_i = r_by_i[r_by_i["group"] != "Unknown"]
     fig = px.line(r_by_i, x="month", y="rented", color="group",
@@ -164,6 +175,10 @@ with tab_instr:
 # ── Revenue vs Cost ───────────────────────────────────────────────────────
 with tab_rev:
     st.markdown("#### Cumulative rental revenue vs fleet cost")
+    source_links(
+        ("Revenue", SALES_SHEET, "rental_income_df"),
+        ("Cost", PURCHASES_SHEET, "rental_fleet_df"),
+    )
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=rvc["month"], y=rvc["cum_revenue"],
                              name="Cumulative revenue", mode="lines",
@@ -186,6 +201,7 @@ with tab_rev:
 
 # ── Delinquency ───────────────────────────────────────────────────────────
 with tab_delinq:
+    source_links(("", SALES_SHEET, "rental_income_df"))
     dq = R.delinquency_by_month(flows, span)
     total_count = int(dq["delinquent_count"].sum())
     total_value = float(dq["delinquent_value"].sum())

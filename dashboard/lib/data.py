@@ -11,6 +11,7 @@ Auth resolves in priority order so the same code runs locally and on Cloud:
   1. st.secrets["gcp_service_account"]   (Cloud)
   2. $DV_SERVICE_ACCOUNT                 (explicit local override)
   3. <repo>/.config/gsperad/service_account.json   (default checkout)
+  4. ~/.config/gspread/service_account.json        (gspread's canonical default)
 """
 from __future__ import annotations
 
@@ -23,9 +24,12 @@ import streamlit as st
 from gspread_dataframe import get_as_dataframe
 
 AGG_SHEET = "clean_datasets_dashboard_aggregates"
+SALES_SHEET = "clean_datasets_sales_by_product_cash"
+PURCHASES_SHEET = "clean_datasets_purchases_by_product"
 
 _DAILY_TTL = 60 * 60 * 24  # rebuilt once a day by the ETL; no point re-pulling more often
 _DEFAULT_SA = Path(__file__).resolve().parents[2] / ".config" / "gsperad" / "service_account.json"
+_GSPREAD_DEFAULT_SA = Path.home() / ".config" / "gspread" / "service_account.json"
 _TRUE = {"true", "1", "1.0", "yes", "y", "t"}
 
 
@@ -47,14 +51,16 @@ def _client() -> gspread.Client:
     secret = _secret_account()
     if secret is not None:
         return gspread.service_account_from_dict(secret)
-    path = os.environ.get("DV_SERVICE_ACCOUNT") or str(_DEFAULT_SA)
-    if not Path(path).is_file():
-        raise FileNotFoundError(
-            "No Google service account found. Add `gcp_service_account` to "
-            "Streamlit secrets, set $DV_SERVICE_ACCOUNT, or place the key at "
-            f"{_DEFAULT_SA}."
-        )
-    return gspread.service_account(filename=path)
+    env_path = os.environ.get("DV_SERVICE_ACCOUNT")
+    candidates = [Path(env_path)] if env_path else [_DEFAULT_SA, _GSPREAD_DEFAULT_SA]
+    for cand in candidates:
+        if cand.is_file():
+            return gspread.service_account(filename=str(cand))
+    raise FileNotFoundError(
+        "No Google service account found. Add `gcp_service_account` to "
+        "Streamlit secrets, set $DV_SERVICE_ACCOUNT, or place the key at "
+        f"{_DEFAULT_SA} or {_GSPREAD_DEFAULT_SA}."
+    )
 
 
 def _read(tab: str) -> pd.DataFrame:
@@ -234,3 +240,31 @@ def global_monthly_span() -> pd.PeriodIndex:
         return pd.PeriodIndex([], freq="M")
     return pd.period_range(
         min(mins), pd.Timestamp.today().to_period("M"), freq="M")
+
+
+# ── Source-data drill-down links ──────────────────────────────────────────
+@st.cache_data(ttl=_DAILY_TTL, show_spinner=False)
+def worksheet_url(sheet: str, tab: str) -> str | None:
+    """Resolve a Google Sheets URL that opens directly to `tab` in `sheet`.
+    Cached so each (sheet, tab) only round-trips once a day."""
+    try:
+        return _client().open(sheet).worksheet(tab).url
+    except Exception:
+        return None
+
+
+def source_links(*sources: tuple[str, str, str]) -> None:
+    """Render a 'Source — …' caption with click-through links to the clean
+    Google Sheet tab(s) backing the chart above. Each source is
+    ``(label, sheet, tab)``; labels distinguish multiple sources on one
+    chart (e.g. Owned vs Rented in Rentals). A single source can pass an
+    empty label."""
+    parts: list[str] = []
+    for label, sheet, tab in sources:
+        url = worksheet_url(sheet, tab)
+        if not url:
+            continue
+        link = f"[`{tab}`]({url}) ↗"
+        parts.append(f"{label}: {link}" if label else link)
+    if parts:
+        st.caption("Source — " + " &nbsp;·&nbsp; ".join(parts))

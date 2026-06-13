@@ -16,7 +16,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.data import global_monthly_span, load_expenses_monthly
+from lib.data import (PURCHASES_SHEET, global_monthly_span,
+                      load_expenses_monthly, source_links)
 from lib import expenses as E
 from lib.filters import date_range_filter
 from lib.theme import EXPENSE_CLASS_COLORS, apply_theme
@@ -123,6 +124,7 @@ _CLASS_ORDER = ["Fixed", "Variable", "Infrequent"]
 # Charts + table
 # ──────────────────────────────────────────────────────────────────────────
 st.markdown("#### Monthly expenses by class")
+source_links(("", PURCHASES_SHEET, "expenses_df"))
 amt_cls = E.amount_by_month(expenses, span, by="expense_class")
 fig = px.line(amt_cls, x="month", y="amount", color="group",
               color_discrete_map=EXPENSE_CLASS_COLORS,
@@ -135,6 +137,7 @@ st.caption("Fixed costs should read as a roughly flat baseline; variable rides "
            "with activity; infrequent shows up as occasional spikes.")
 
 st.markdown("#### Total monthly expenses")
+source_links(("", PURCHASES_SHEET, "expenses_df"))
 amt_total = E.amount_by_month(expenses, span)
 fig = go.Figure(go.Bar(x=amt_total["month"], y=amt_total["amount"],
                        name="Expenses", marker_color=EXPENSE_CLASS_COLORS["Fixed"],
@@ -144,6 +147,7 @@ fig.update_layout(height=340, yaxis_title="$", yaxis_tickprefix="$",
 st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
 
 st.markdown("#### Breakdown by category")
+source_links(("", PURCHASES_SHEET, "expenses_df"))
 breakdown = E.category_breakdown(expenses)
 if not len(breakdown):
     st.info("No expenses in the current filter set.", icon="ℹ️")
