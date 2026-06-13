@@ -13,7 +13,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.data import global_monthly_span, load_workshop_monthly
+from lib.data import (SALES_SHEET, global_monthly_span, load_workshop_monthly,
+                      source_links)
 from lib.filters import date_range_filter
 from lib import workshop as W
 from lib.theme import (BROWN, CATEGORICAL, GOLD, SAGE, SLATE, apply_theme)
@@ -125,6 +126,7 @@ tab_overview, tab_cat, tab_split, tab_emp = st.tabs(
 # ── Overview ──────────────────────────────────────────────────────────────
 with tab_overview:
     st.markdown("#### Monthly services revenue")
+    source_links(("", SALES_SHEET, "services_sales_df"))
     rev = W.revenue_by_month(services, span)
     fig = go.Figure(go.Scatter(
         x=rev["month"], y=rev["revenue"], mode="lines",
@@ -137,6 +139,7 @@ with tab_overview:
                     key="ws_overview_revenue")
 
     st.markdown("#### Jobs per month")
+    source_links(("", SALES_SHEET, "services_sales_df"))
     jobs = W.transactions_by_month(services, span)
     fig = go.Figure(go.Scatter(
         x=jobs["month"], y=jobs["transactions"], mode="lines",
@@ -149,6 +152,7 @@ with tab_overview:
 # ── By Service Category ───────────────────────────────────────────────────
 with tab_cat:
     st.markdown("#### Top categories by revenue")
+    source_links(("", SALES_SHEET, "services_sales_df"))
     top_n = 6
     top_cats = W.top_n_categories(services, n=top_n)
     if not top_cats:
@@ -172,6 +176,7 @@ with tab_cat:
                    "folded into 'Other'. Full breakdown below.")
 
     st.markdown("#### Full breakdown")
+    source_links(("", SALES_SHEET, "services_sales_df"))
     breakdown = W.category_breakdown(services)
     if not len(breakdown):
         st.info("No rows to break down.", icon="ℹ️")
@@ -199,6 +204,7 @@ with tab_split:
     order = ["Instrument services", "Bow services"]
 
     st.markdown("#### Revenue: instrument vs bow services")
+    source_links(("", SALES_SHEET, "services_sales_df"))
     rev_pt = W.revenue_by_month(services, span, by="bow_flag")
     fig = px.line(rev_pt, x="month", y="revenue", color="group",
                   color_discrete_map=PRODUCT_SERVICE_COLORS,
@@ -210,6 +216,7 @@ with tab_split:
                     key="ws_split_revenue")
 
     st.markdown("#### Jobs: instrument vs bow services")
+    source_links(("", SALES_SHEET, "services_sales_df"))
     jobs_pt = W.transactions_by_month(services, span, by="bow_flag")
     fig = px.line(jobs_pt, x="month", y="transactions", color="group",
                   color_discrete_map=PRODUCT_SERVICE_COLORS,
@@ -239,6 +246,7 @@ with tab_emp:
     order = present + extra
 
     st.markdown("#### Revenue by employee over time")
+    source_links(("", SALES_SHEET, "services_sales_df"))
     rev_e = W.revenue_by_month(services, span, by="employee_label")
     fig = px.line(rev_e, x="month", y="revenue", color="group",
                   color_discrete_map=EMPLOYEE_PALETTE,
@@ -250,6 +258,7 @@ with tab_emp:
                     key="ws_employee_revenue")
 
     st.markdown("#### Jobs by employee over time")
+    source_links(("", SALES_SHEET, "services_sales_df"))
     jobs_e = W.transactions_by_month(services, span, by="employee_label")
     fig = px.line(jobs_e, x="month", y="transactions", color="group",
                   color_discrete_map=EMPLOYEE_PALETTE,

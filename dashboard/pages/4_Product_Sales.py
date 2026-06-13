@@ -14,8 +14,9 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from lib.data import (global_monthly_span, load_product_inventory,
-                      load_product_sales_monthly)
+from lib.data import (PURCHASES_SHEET, SALES_SHEET, global_monthly_span,
+                      load_product_inventory, load_product_sales_monthly,
+                      source_links)
 from lib import products as P
 from lib.filters import date_range_filter
 from lib.theme import BROWN, CATEGORICAL, SAGE, SLATE, apply_theme
@@ -105,6 +106,7 @@ with tab_rev:
                "partial — figures update daily.")
 
     st.markdown("#### Monthly revenue and products sold")
+    source_links(("", SALES_SHEET, "product_sales_df"))
     rev = P.revenue_by_month(sales, span)
     units = P.units_by_month(sales, span)
     fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -126,6 +128,7 @@ with tab_rev:
     st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
 
     st.markdown("#### Revenue by product category")
+    source_links(("", SALES_SHEET, "product_sales_df"))
     rev_c = P.revenue_by_month(sales, span, by="product_category")
     fig = px.line(rev_c, x="month", y="revenue", color="group",
                   color_discrete_map=_CAT_CMAP,
@@ -135,6 +138,7 @@ with tab_rev:
     st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
 
     st.markdown("#### Breakdown by category and subcategory")
+    source_links(("", SALES_SHEET, "product_sales_df"))
     breakdown = P.category_breakdown(sales)
     if not len(breakdown):
         st.info("No product sales in the current filter set.", icon="ℹ️")
@@ -175,6 +179,7 @@ with tab_inv:
                "as-of-today totals for the latest month in the selected range.")
 
     st.markdown("#### Inventory units and cost over time")
+    source_links(("", PURCHASES_SHEET, "accessories_products_df"))
     by_m = P.inventory_by_month(inv, span)
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_trace(go.Scatter(x=by_m["month"], y=by_m["units"], name="Units",
@@ -194,6 +199,7 @@ with tab_inv:
     st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
 
     st.markdown("#### Stock on hand by category (as of latest month)")
+    source_links(("", PURCHASES_SHEET, "accessories_products_df"))
     inv_bd = P.inventory_breakdown(inv, span)
     if not len(inv_bd):
         st.info("No product inventory in the current filter set.", icon="ℹ️")

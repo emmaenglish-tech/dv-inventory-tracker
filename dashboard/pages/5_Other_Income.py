@@ -12,7 +12,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.data import global_monthly_span, load_other_income_monthly
+from lib.data import (SALES_SHEET, global_monthly_span,
+                      load_other_income_monthly, source_links)
 from lib import other_income as O
 from lib.filters import date_range_filter
 from lib.theme import CATEGORICAL, SAGE, apply_theme
@@ -78,6 +79,7 @@ def _shared_xaxis(fig: go.Figure) -> go.Figure:
 # Charts + table
 # ──────────────────────────────────────────────────────────────────────────
 st.markdown("#### Monthly other income")
+source_links(("", SALES_SHEET, "shipping_income_df"))
 rev_total = O.revenue_by_month(income, span)
 fig = go.Figure(go.Bar(x=rev_total["month"], y=rev_total["revenue"],
                        name="Other income", marker_color=SAGE,
@@ -87,6 +89,7 @@ fig.update_layout(height=360, yaxis_title="$", yaxis_tickprefix="$",
 st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
 
 st.markdown("#### Other income by type")
+source_links(("", SALES_SHEET, "shipping_income_df"))
 types = O.income_types(income)
 cmap = {t: CATEGORICAL[i % len(CATEGORICAL)] for i, t in enumerate(types)}
 rev_t = O.revenue_by_month(income, span, by="income_type")
@@ -98,6 +101,7 @@ fig.update_layout(height=380, yaxis_tickprefix="$", yaxis_tickformat=",.0f")
 st.plotly_chart(_shared_xaxis(fig), use_container_width=True)
 
 st.markdown("#### Breakdown by income type")
+source_links(("", SALES_SHEET, "shipping_income_df"))
 breakdown = O.type_breakdown(income)
 if not len(breakdown):
     st.info("No other-income rows in the current filter set.", icon="ℹ️")

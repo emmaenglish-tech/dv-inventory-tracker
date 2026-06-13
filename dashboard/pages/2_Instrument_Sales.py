@@ -13,7 +13,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.data import global_monthly_span, load_sales_monthly
+from lib.data import (SALES_SHEET, global_monthly_span, load_sales_monthly,
+                      source_links)
 from lib.filters import date_range_filter
 from lib.instruments import add_instrument_group, ordered_present
 from lib import sales as S
@@ -127,6 +128,7 @@ tab_overview, tab_instr, tab_acq = st.tabs(
 # ── Overview ──────────────────────────────────────────────────────────────
 with tab_overview:
     st.markdown("#### Monthly sales revenue")
+    source_links(("", SALES_SHEET, "inventory_sales_df"))
     rev = S.revenue_by_month(sales, span)
     fig = go.Figure(go.Scatter(
         x=rev["month"], y=rev["revenue"], mode="lines",
@@ -139,6 +141,7 @@ with tab_overview:
                     key="sales_overview_revenue")
 
     st.markdown("#### Units sold per month")
+    source_links(("", SALES_SHEET, "inventory_sales_df"))
     units = S.units_sold_by_month(sales, span)
     fig = go.Figure(go.Scatter(
         x=units["month"], y=units["units"], mode="lines",
@@ -155,6 +158,7 @@ with tab_instr:
     order = ordered_present(sales["instrument_group"].unique())
 
     st.markdown("#### Revenue by instrument over time")
+    source_links(("", SALES_SHEET, "inventory_sales_df"))
     rev_i = S.revenue_by_month(sales, span, by="instrument_group")
     st.plotly_chart(
         _shared_xaxis(_line_by_group(rev_i, "revenue", order,
@@ -163,6 +167,7 @@ with tab_instr:
         use_container_width=True, key="sales_instr_revenue")
 
     st.markdown("#### Units sold by instrument over time")
+    source_links(("", SALES_SHEET, "inventory_sales_df"))
     units_i = S.units_sold_by_month(sales, span, by="instrument_group")
     st.plotly_chart(
         _shared_xaxis(_line_by_group(units_i, "units", order,
@@ -179,6 +184,7 @@ with tab_acq:
     order = ["Consignment", "DV-Owned"]
 
     st.markdown("#### Revenue by acquisition source over time")
+    source_links(("", SALES_SHEET, "inventory_sales_df"))
     rev_o = S.revenue_by_month(sales, span, by="ownership")
     st.plotly_chart(
         _shared_xaxis(_line_by_group(rev_o, "revenue", order, ACQUISITION_COLORS,
@@ -186,6 +192,7 @@ with tab_acq:
         use_container_width=True, key="sales_acq_revenue")
 
     st.markdown("#### Units sold by acquisition source over time")
+    source_links(("", SALES_SHEET, "inventory_sales_df"))
     units_o = S.units_sold_by_month(sales, span, by="ownership")
     st.plotly_chart(
         _shared_xaxis(_line_by_group(units_o, "units", order, ACQUISITION_COLORS,
