@@ -185,9 +185,9 @@ def waterfall(rows: pd.DataFrame, totals: set[str]) -> go.Figure:
     order = _series_order(rows)
     r = rows.set_index("series").loc[order]
     fig = go.Figure(go.Waterfall(
-        # the first bar sets the level; later totals are drawn at their running total
+        # Revenue (first) is relative off 0 so it draws blue; later totals are drawn at their running total
         x=list(r.index), y=r["value"],
-        measure=["absolute" if i == 0 else "total" if s in totals else "relative" for i, s in enumerate(r.index)],
+        measure=["total" if i > 0 and s in totals else "relative" for i, s in enumerate(r.index)],
         increasing=dict(marker=dict(color=UP)), decreasing=dict(marker=dict(color=DOWN)),
         totals=dict(marker=dict(color=TOTAL)), connector=dict(line=dict(color=AXIS, width=1)),
         texttemplate="%{y:$.3~s}", textposition="outside",
