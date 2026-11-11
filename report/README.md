@@ -10,7 +10,7 @@ It replaces `dashboard/`, which keeps running unchanged until cutover.
 
 Every number, including the headline sentences, is computed upstream in **denver_violins_data**
 (`redesign/loader/report.py`) and written once a day to the `rpt_*` tabs of the **dv_clean** Google Sheet. The app
-reads all twelve tabs in one batched API call, picks rows (basis, period, chart) and draws them. It never sums,
+reads all thirteen tabs in one batched API call, picks rows (basis, period, chart) and draws them. It never sums,
 groups or derives anything. `tests/test_read_only.py` fails if aggregation code creeps in.
 
 Need a new number? Add it to `report.py`, not here.
@@ -23,6 +23,7 @@ Need a new number? Add it to `report.py`, not here.
 | `rpt_outlook` | Typical month and usual range per area, next 12 months |
 | `rpt_recent_sales` | Instrument and bow sale lines, last full month and this month (no customer names) |
 | `rpt_definitions`, `rpt_about` | Plain-English definitions; as-of date |
+| `rpt_insights` | AI-written bullets per page and basis (kind good / watch / idea), written weekly by `redesign/loader/insights.py`; shown in a violet "AI insights" card under the short version. Optional: no card until the tab exists |
 
 ## Filters (one row, top of every page)
 

@@ -19,7 +19,7 @@ import streamlit as st
 SHEET_ID = "1dEdAr63mhBqdoRz_55QWuTfKe14GyHbhkjUW-lEq0zI"  # dv_clean (not a secret: access is Drive sharing)
 SECTIONS = ("overview", "sales", "workshop", "rentals", "other", "expenses")
 TABS = [f"rpt_{s}" for s in SECTIONS] + ["rpt_kpis", "rpt_headlines", "rpt_outlook", "rpt_recent_sales",
-                                         "rpt_definitions", "rpt_about"]
+                                         "rpt_definitions", "rpt_about", "rpt_insights"]
 NUMERIC = {"value", "prior", "change_pct", "sort", "baseline", "low", "high", "ttm_avg", "same_month_ly",
            "actual_to_date", "amount"}
 BOOLEAN = {"partial"}
@@ -66,10 +66,12 @@ def _from_sheet() -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
         raise RuntimeError("No data source: set DV_REPORT_DIR (local CSVs), add gcp_service_account to "
                            "Streamlit secrets, or set DV_SERVICE_ACCOUNT to a key file.")
     book = gc.open_by_key(SHEET_ID)
-    got = book.values_batch_get([f"'{t}'" for t in TABS], params={"valueRenderOption": "UNFORMATTED_VALUE"})
-    frames = {t: _frame(r.get("values", [])) for t, r in zip(TABS, got["valueRanges"])}
     urls = {ws.title: f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit#gid={ws.id}"
             for ws in book.worksheets() if ws.title in TABS}
+    present = [t for t in TABS if t in urls]  # rpt_insights only exists after its first weekly run
+    got = book.values_batch_get([f"'{t}'" for t in present], params={"valueRenderOption": "UNFORMATTED_VALUE"})
+    frames = {t: pd.DataFrame() for t in TABS}
+    frames.update({t: _frame(r.get("values", [])) for t, r in zip(present, got["valueRanges"])})
     return frames, urls
 
 
@@ -137,6 +139,14 @@ def headlines(section: str) -> list[str]:
     if h.empty:
         return []
     return h[(h["section"] == section) & (h["basis"] == basis())].sort_values("sort")["text"].tolist()
+
+
+def insights(section: str) -> pd.DataFrame:
+    """AI-written bullets for one page and the current basis (rpt_insights, written weekly upstream)."""
+    i = tab("rpt_insights")
+    if i.empty:
+        return i
+    return i[(i["section"] == section) & (i["basis"] == basis())].sort_values("sort")
 
 
 def definitions(section: str) -> pd.DataFrame:
