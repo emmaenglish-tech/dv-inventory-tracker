@@ -41,6 +41,9 @@ DIMENSIONS = {
     "fleet": ["Fleet owned (known purchases)", "On rent"],
     "cumulative": ["Rental revenue", "Spent on rental instruments (known purchases)"],
     "money": ["Revenue", "Expenses", "Net income"],
+    "deposits": ["Deposits held"],
+    "deposit_move": ["Deposits taken", "Returned to renters", "Kept by DV"],
+    "liability": ["Rental deposits", "Instrument sale deposits", "Held for a consignor"],
 }
 ORDINAL = {"size": ["Under $10k", "$10k–$50k", "$50k and up"]}
 

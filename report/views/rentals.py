@@ -38,6 +38,24 @@ with c2:
 st.caption(f"Renter names and details are in the dv_clean sheet, tab `rental_delinquency` "
            f"([open]({data.tab_url('rental_delinquency')})), which is not shown here.")
 
+ui.kpi_row("rentals", ["deposits_held", "deposits_not_billed"])
+ui.kpi_row("rentals", ["deposits_returned", "deposits_kept"])
+c1, c2 = st.columns(2)
+with c1:
+    rows = data.chart("rentals", "deposits_held", "month", months=months)
+    ui.chart_card("Rental deposits held", "What QuickBooks shows as owed back to renters at the end of each month. "
+                  "It only goes down when a refund or a kept deposit is entered, so deposits of renters who have "
+                  "already returned their instrument can still be counted here.",
+                  charts.lines(rows, "deposits"), rows, "rentals", "deposits_held")
+with c2:
+    rows = data.chart("rentals", "deposit_flows", "year")
+    ui.chart_card("Deposits taken, returned and kept", "Each calendar year: deposits renters paid, deposits given "
+                  "back (refunds, checks, credits) and deposits DV kept (moved to rental income). This year runs "
+                  "through the last full month.", charts.grouped_bars(rows, "deposit_move"), rows, "rentals",
+                  "deposit_flows")
+st.caption(f"Every deposit, with the renter's name and whether they are still renting, is in the dv_clean sheet, "
+           f"tab `rental_deposits` ([open]({data.tab_url('rental_deposits')})), which is not shown here.")
+
 c1, c2 = st.columns(2)
 with c1:
     rows = data.chart("rentals", "rental_revenue_seasonality", "calendar_month")
