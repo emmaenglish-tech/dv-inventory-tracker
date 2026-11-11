@@ -19,6 +19,11 @@ ui.chart_card(
     "which smooths out the months that had a big instrument sale.",
     charts.stacked_bars(rows, "area", average=avg), rows, "overview", "revenue_by_area", note=ui.partial_note())
 
+rows = data.chart("overview", "revenue_by_area", "year")
+ui.chart_card("Revenue by year", "Each column is one calendar year, split by area. This year runs through the last "
+              "full month.", charts.stacked_bars(rows, "area", grain="year", height=340), rows, "overview",
+              "revenue_by_area", key="overview-years")
+
 rows = data.chart("overview", "profit_bridge", "window", period=w)
 ui.chart_card(
     "From revenue to profit",

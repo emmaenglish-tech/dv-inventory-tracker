@@ -17,6 +17,12 @@ ui.chart_card("Sales by month, by instrument",
               "than single months.", charts.stacked_bars(rows, "instrument"), rows, "sales", "sales_by_instrument",
               note=ui.partial_note())
 
+rows = data.chart("sales", "units_by_instrument", "month", months=months)
+ui.chart_card("Instruments & bows sold by month",
+              "How many sold each month, by instrument. A deposit and the installments for one instrument count "
+              "once, in the month of the first payment.", charts.stacked_bars(rows, "instrument", money=False),
+              rows, "sales", "units_by_instrument", note=ui.partial_note(), money_values=False, key="units-month")
+
 c1, c2 = st.columns(2)
 with c1:
     rows = data.chart("sales", "sales_by_instrument", "window", period=w)

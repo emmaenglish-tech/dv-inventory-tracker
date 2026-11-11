@@ -14,6 +14,11 @@ ui.chart_card("Workshop revenue by month", "Each column is one month, split into
               "other bow repairs and appraisals.", charts.stacked_bars(rows, "workshop_kind"), rows, "workshop",
               "workshop_by_kind", note=ui.partial_note())
 
+rows = data.chart("workshop", "workshop_by_kind", "window", period=w)
+ui.chart_card("Instrument and bow work against last year",
+              f"Revenue for {now} (blue) and the same months last year (gray), by kind of work.",
+              charts.this_vs_last_year(rows, now, prior), rows, "workshop", "workshop_by_kind", key="workshop-yoy")
+
 c1, c2 = st.columns([3, 2])
 with c1:
     rows = data.chart("workshop", "workshop_by_service", "window", period=w)
