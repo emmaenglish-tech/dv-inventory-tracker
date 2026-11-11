@@ -27,13 +27,15 @@ c1, c2 = st.columns(2)
 with c1:
     rows = data.chart("rentals", "delinquent_customers", "month", months=months)
     ui.chart_card("Renters behind on payments", "Renters behind at the end of each month: an invoice unpaid for "
-                  "more than 30 days, or autopay failing two or more months in a row.",
+                  "more than 30 days, autopay failing two or more months in a row, or a charge that QuickBooks "
+                  "recorded but that still hadn't reached the bank 10 days later.",
                   charts.stacked_bars(rows, "delinquency", money=False), rows, "rentals", "delinquent_customers",
                   money_values=False)
 with c2:
     rows = data.chart("rentals", "delinquent_amount", "month", months=months)
     ui.chart_card("Amount those renters owe", "What the late renters owed at the end of each month. Failed "
-                  "autopay amounts are estimated from each renter's usual charge.",
+                  "autopay amounts are estimated from each renter's usual charge; charges not deposited are the "
+                  "receipt amounts.",
                   charts.stacked_bars(rows, "delinquency"), rows, "rentals", "delinquent_amount")
 st.caption(f"Renter names and details are in the dv_clean sheet, tab `rental_delinquency` "
            f"([open]({data.tab_url('rental_delinquency')})), which is not shown here.")

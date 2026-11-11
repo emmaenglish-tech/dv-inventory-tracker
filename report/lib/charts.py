@@ -36,7 +36,7 @@ DIMENSIONS = {
     "other_kind": ["Strings", "Cases", "Bow hair", "Parts & fittings", "Other products", "Shipping",
                    "Events & concerts"],
     "expense_group": ["Fixed costs", "Variable costs", "Cost of sales"],
-    "delinquency": ["Unpaid invoices over 30 days", "Autopay failing 2+ months"],
+    "delinquency": ["Unpaid invoices over 30 days", "Autopay failing 2+ months", "Charges not deposited after 10 days"],
     "consignment": ["Consignment sales", "Paid to consignors", "What DV keeps"],
     "fleet": ["Fleet owned (known purchases)", "On rent"],
     "cumulative": ["Rental revenue", "Spent on rental instruments (known purchases)"],
