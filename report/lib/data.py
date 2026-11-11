@@ -79,7 +79,8 @@ def _from_folder(folder: str) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
     frames = {}
     for t in TABS:
         path = Path(folder) / f"{t}.csv"
-        frames[t] = _typed(pd.read_csv(path, dtype=str, keep_default_na=False)) if path.exists() else pd.DataFrame()
+        blank = not path.exists() or path.stat().st_size == 0  # a missing or 0-byte file is an empty tab
+        frames[t] = pd.DataFrame() if blank else _typed(pd.read_csv(path, dtype=str, keep_default_na=False))
     return frames, {}
 
 

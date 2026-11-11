@@ -56,7 +56,11 @@ def test_card_shows_this_page_and_basis_in_order(folder):
     assert any("A cash-view bullet." in t for t in cash) and not any("Rentals are up" in t for t in cash)
 
 
-def test_no_card_without_insights(folder):
+@pytest.mark.parametrize("tab", [None, "", "section,basis,sort,kind,text,generated_at,data_as_of,model\n"])
+def test_no_card_without_insights(folder, tab):
+    """Missing tab, blank tab, or header only (no rows yet): no card, and the short version still shows."""
+    if tab is not None:
+        (folder / "rpt_insights.csv").write_text(tab)
     at = run()
     assert not at.exception
     text = [m.value for m in at.markdown]
