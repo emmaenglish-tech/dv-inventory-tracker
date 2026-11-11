@@ -27,16 +27,36 @@ c1, c2 = st.columns(2)
 with c1:
     rows = data.chart("rentals", "delinquent_customers", "month", months=months)
     ui.chart_card("Renters behind on payments", "Renters behind at the end of each month: an invoice unpaid for "
-                  "more than 30 days, or autopay failing two or more months in a row.",
+                  "more than 30 days, autopay failing two or more months in a row, or a charge that QuickBooks "
+                  "recorded but that still hadn't reached the bank 10 days later.",
                   charts.stacked_bars(rows, "delinquency", money=False), rows, "rentals", "delinquent_customers",
                   money_values=False)
 with c2:
     rows = data.chart("rentals", "delinquent_amount", "month", months=months)
     ui.chart_card("Amount those renters owe", "What the late renters owed at the end of each month. Failed "
-                  "autopay amounts are estimated from each renter's usual charge.",
+                  "autopay amounts are estimated from each renter's usual charge; charges not deposited are the "
+                  "receipt amounts.",
                   charts.stacked_bars(rows, "delinquency"), rows, "rentals", "delinquent_amount")
 st.caption(f"Renter names and details are in the dv_clean sheet, tab `rental_delinquency` "
            f"([open]({data.tab_url('rental_delinquency')})), which is not shown here.")
+
+ui.kpi_row("rentals", ["deposits_held", "deposits_not_billed"])
+ui.kpi_row("rentals", ["deposits_returned", "deposits_kept"])
+c1, c2 = st.columns(2)
+with c1:
+    rows = data.chart("rentals", "deposits_held", "month", months=months)
+    ui.chart_card("Rental deposits held", "What QuickBooks shows as owed back to renters at the end of each month. "
+                  "It only goes down when a refund or a kept deposit is entered, so deposits of renters who have "
+                  "already returned their instrument can still be counted here.",
+                  charts.lines(rows, "deposits"), rows, "rentals", "deposits_held")
+with c2:
+    rows = data.chart("rentals", "deposit_flows", "year")
+    ui.chart_card("Deposits taken, returned and kept", "Each calendar year: deposits renters paid, deposits given "
+                  "back (refunds, checks, credits) and deposits DV kept (moved to rental income). This year runs "
+                  "through the last full month.", charts.grouped_bars(rows, "deposit_move"), rows, "rentals",
+                  "deposit_flows")
+st.caption(f"Every deposit, with the renter's name and whether they are still renting, is in the dv_clean sheet, "
+           f"tab `rental_deposits` ([open]({data.tab_url('rental_deposits')})), which is not shown here.")
 
 c1, c2 = st.columns(2)
 with c1:

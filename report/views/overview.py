@@ -45,4 +45,12 @@ with c2:
                   "through the last full month.", charts.grouped_bars(rows, "money"), rows, "overview",
                   "net_income")
 
+ui.kpi_row("overview", ["instrument_liabilities"])
+rows = data.chart("overview", "instrument_liabilities", "month", months=months)
+ui.chart_card("Instrument liabilities", "Money DV holds that belongs to someone else, at the end of each month: "
+              "rental deposits, deposits on instrument sales, and money a consignor placed with DV to buy "
+              "instruments. Loans from investors aren't included.",
+              charts.stacked_bars(rows, "liability"), rows, "overview", "instrument_liabilities",
+              note=ui.partial_note())
+
 ui.definitions_box("overview")
